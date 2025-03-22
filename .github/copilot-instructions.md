@@ -1,0 +1,4 @@
+- don't use @apply directive with utility classes
+- frontend application code lives inside the app folder.
+- in nuxt ui now UFormGroup has changed to UFormField
+- keep component and pages in nicely structured way.
