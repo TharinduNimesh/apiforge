@@ -3,18 +3,17 @@ definePageMeta({
   layout: 'console'
 });
 
-import { ref, computed, onMounted, h, resolveComponent } from 'vue';
+import { ref, computed } from 'vue';
 import type { Department } from '~/types/department';
-import type { TableColumn } from '@nuxt/ui';
+import type { TableColumn, DropdownMenuItem } from '@nuxt/ui';
 import { mockDepartments } from '~/data/mockDepartments';
-
-const UBadge = resolveComponent('UBadge');
-const UButton = resolveComponent('UButton');
-const UDropdownMenu = resolveComponent('UDropdownMenu');
+import { mockApis } from '~/data/mockApis';
+import CreateDepartmentModal from '~/components/department/CreateDepartmentModal.vue';
 
 const departments = ref<Department[]>(mockDepartments);
+const apis = ref(mockApis);
 const loading = ref(true);
-const selectedDepartment = ref<Department | null>(null);
+const toast = useToast();
 
 const fetchDepartments = async () => {
   try {
@@ -23,7 +22,7 @@ const fetchDepartments = async () => {
     departments.value = mockDepartments;
   } catch (error) {
     console.error('Error fetching departments:', error);
-    useToast().add({
+    toast.add({
       title: 'Error',
       description: 'Failed to load departments. Please try again later.',
       color: 'error',
@@ -77,111 +76,100 @@ const filteredDepartments = computed(() => {
   return filtered.slice(start * pagination.value.rows, end * pagination.value.rows);
 });
 
-const onPageChange = (newPage: number) => {
-  pagination.value.page = newPage;
-};
-
-const hasDepartments = computed(() => departments.value.length > 0);
-const hasFilteredResults = computed(() => filteredDepartments.value.length > 0);
-
-const menuItems = computed(() => [
-  {
-    label: 'View Details',
-    icon: 'i-heroicons-information-circle',
-    to: `/console/departments/${selectedDepartment.value?.id}`
-  },
-  {
-    label: selectedDepartment.value?.isActive ? 'Deactivate' : 'Activate',
-    icon: selectedDepartment.value?.isActive ? 'i-heroicons-power-off' : 'i-heroicons-check',
-    click: () => toggleDepartmentStatus()
-  }
-]);
-
-const toggleDepartmentStatus = () => {
-  if (selectedDepartment.value) {
-    const dept = departments.value.find(d => d.id === selectedDepartment.value?.id);
-    if (dept) {
-      dept.isActive = !dept.isActive;
-      
-      useToast().add({
-        title: 'Success',
-        description: `Department ${dept.isActive ? 'activated' : 'deactivated'} successfully`,
-        color: 'success'
-      });
-    }
+const toggleDepartmentStatus = (department: Department) => {
+  const dept = departments.value.find(d => d.id === department.id);
+  if (dept) {
+    dept.isActive = !dept.isActive;
+    
+    toast.add({
+      title: 'Success',
+      description: `Department ${dept.isActive ? 'activated' : 'deactivated'} successfully`,
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    });
   }
 };
-
-const getStatusColor = (isActive: boolean): 'success' | 'error' => isActive ? 'success' : 'error';
 
 const columns: TableColumn<Department>[] = [
   {
     accessorKey: 'name',
-    header: 'Department',
-    cell: ({ row }) => {
-      return h('div', { class: 'flex flex-col gap-1' }, [
-        h('div', { class: 'flex items-center gap-2' }, [
-          h('span', { class: 'font-medium' }, row.getValue('name')),
-          h(UBadge, {
-            color: getStatusColor(row.original.isActive),
-            variant: 'subtle',
-            label: row.original.isActive ? 'Active' : 'Inactive'
-          })
-        ]),
-        h('div', { class: 'text-sm text-gray-500' }, row.original.description)
-      ])
-    }
+    header: 'Department'
   },
   {
     accessorKey: 'userAssignments',
-    header: 'Active Users',
-    cell: ({ row }) => {
-      return h(UBadge, {
-        color: 'info',
-        variant: 'subtle',
-        label: row.original.userAssignments.length.toString()
-      })
-    }
+    header: 'Active Users'
   },
   {
     accessorKey: 'apiAssignments',
-    header: 'Active APIs',
-    cell: ({ row }) => {
-      return h(UBadge, {
-        color: 'success',
-        variant: 'subtle',
-        label: row.original.apiAssignments.length.toString()
-      })
-    }
+    header: 'Active APIs'
   },
   {
     accessorKey: 'createdAt',
-    header: 'Created At',
-    cell: ({ row }) => {
-      return new Date(row.getValue('createdAt')).toLocaleDateString()
-    }
+    header: 'Created At'
   },
   {
-    accessorKey: 'actions',
-    header: '',
-    cell: ({ row }) => {
-      return h(UDropdownMenu, {
-        items: menuItems.value,
-        ui: {
-          content: 'w-48',
-          item: 'flex items-center gap-2 w-full cursor-pointer select-none px-4 py-2 text-gray-600 hover:bg-orange-50 hover:text-orange-500',
-          activeItem: 'text-orange-500 bg-orange-50'
-        },
-        mode: 'click',
-        onOpen: () => selectedDepartment.value = row.original
-      }, () => h(UButton, {
-        color: 'neutral',
-        variant: 'ghost',
-        icon: 'i-heroicons-ellipsis-horizontal'
-      }))
-    }
+    id: 'actions'
   }
 ];
+
+function getDropdownActions(department: Department): DropdownMenuItem[][] {
+  return [
+    [
+      {
+        label: 'View Details',
+        icon: 'i-heroicons-information-circle',
+        to: `/console/departments/${department.id}`
+      }
+    ],
+    [
+      department.isActive ? {
+        label: 'Deactivate Department',
+        icon: 'i-heroicons-power-20-solid',
+        color: 'error',
+        onSelect: () => toggleDepartmentStatus(department)
+      } : {
+        label: 'Activate Department',
+        icon: 'i-heroicons-check',
+        color: 'success',
+        onSelect: () => toggleDepartmentStatus(department)
+      }
+    ]
+  ]
+}
+
+const hasDepartments = computed(() => departments.value.length > 0);
+const hasFilteredResults = computed(() => filteredDepartments.value.length > 0);
+
+const createDepartment = () => {
+  // TODO: Implement department creation
+  console.log('Create department clicked');
+};
+
+const handleDepartmentCreate = (form: any) => {
+  const newDepartment: Department = {
+    id: crypto.randomUUID(),
+    name: form.name,
+    description: form.description,
+    isActive: true,
+    apiAssignments: form.apiAssignments,
+    userAssignments: [],
+    createdAt: new Date().toISOString(),
+    createdBy: '1' // Mock user ID
+  };
+
+  departments.value.unshift(newDepartment);
+  
+  toast.add({
+    title: 'Success',
+    description: 'Department created successfully',
+    color: 'success',
+    icon: 'i-heroicons-check-circle'
+  });
+};
+
+const onPageChange = (newPage: number) => {
+  pagination.value.page = newPage;
+};
 
 const emptyMessage = computed(() => {
   if (departments.value.length > 0 && filteredDepartments.value.length === 0) {
@@ -195,11 +183,6 @@ const emptyMessage = computed(() => {
   }
   return 'No departments available';
 });
-
-const createDepartment = () => {
-  // TODO: Implement department creation
-  console.log('Create department clicked');
-};
 </script>
 
 <template>
@@ -209,12 +192,7 @@ const createDepartment = () => {
         <h2 class="text-2xl font-semibold leading-tight text-gray-800">
           Departments Management
         </h2>
-        <UButton
-          icon="i-heroicons-plus"
-          label="Create Department"
-          color="primary"
-          @click="createDepartment"
-        />
+        <CreateDepartmentModal :apis="apis" @submit="handleDepartmentCreate" />
       </div>
 
       <!-- Filter Bar -->
@@ -224,12 +202,10 @@ const createDepartment = () => {
 
       <!-- Loading State -->
       <div v-if="loading">
-        <!-- Skeleton for results count -->
         <div class="mb-4 flex items-center">
           <USkeleton class="h-6 w-48" />
         </div>
         
-        <!-- Skeleton for table -->
         <UCard>
           <div class="space-y-4">
             <div v-for="n in 5" :key="n" class="flex items-center gap-4">
@@ -256,12 +232,7 @@ const createDepartment = () => {
                 Start by creating your first department.
               </p>
             </div>
-            <UButton
-              icon="i-heroicons-plus"
-              label="Create Department"
-              color="primary"
-              @click="createDepartment"
-            />
+            <CreateDepartmentModal :apis="apis" @submit="handleDepartmentCreate" />
           </div>
         </div>
 
@@ -308,12 +279,57 @@ const createDepartment = () => {
 
           <!-- Departments Table -->
           <UCard>
-            <UTable
-              :data="filteredDepartments"
+            <UTable 
+              :data="filteredDepartments" 
               :columns="columns"
-              :hover="true"
-              class="[&_th:first-child]:rounded-l-lg [&_th:last-child]:rounded-r-lg"
-            />
+              hover
+            >
+              <template #name-cell="{ row }">
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium">{{ row.original.name }}</span>
+                    <UBadge
+                      :color="row.original.isActive ? 'success' : 'error'"
+                      variant="subtle"
+                      :label="row.original.isActive ? 'Active' : 'Inactive'"
+                    />
+                  </div>
+                  <div class="text-sm text-gray-500">
+                    {{ row.original.description }}
+                  </div>
+                </div>
+              </template>
+
+              <template #userAssignments-cell="{ row }">
+                <UBadge
+                  color="info"
+                  variant="subtle"
+                  :label="row.original.userAssignments.length.toString()"
+                />
+              </template>
+
+              <template #apiAssignments-cell="{ row }">
+                <UBadge
+                  color="success"
+                  variant="subtle"
+                  :label="row.original.apiAssignments.length.toString()"
+                />
+              </template>
+
+              <template #createdAt-cell="{ row }">
+                {{ new Date(row.getValue('createdAt')).toLocaleDateString() }}
+              </template>
+
+              <template #actions-cell="{ row }">
+                <UDropdownMenu :items="getDropdownActions(row.original)">
+                  <UButton
+                    icon="i-heroicons-ellipsis-horizontal"
+                    color="neutral"
+                    variant="ghost"
+                  />
+                </UDropdownMenu>
+              </template>
+            </UTable>
 
             <!-- Pagination -->
             <template v-if="pagination.total > pagination.rows">

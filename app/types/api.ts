@@ -31,3 +31,12 @@ export interface ApiResponse {
   description: string;
   schema?: Record<string, any>;
 }
+
+export interface ApiOption {
+  id: string;
+  name: string;
+  type: 'FREE' | 'PAID';
+  status: 'ACTIVE' | 'INACTIVE';
+  description?: string;
+  endpoint?: string;
+}

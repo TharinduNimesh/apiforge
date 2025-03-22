@@ -12,6 +12,22 @@ export default defineAppConfig({
           size: 'xl'
         }
       },
+      selectMenu: {
+        slots: {
+          root: 'w-full',
+        },
+        defaultVariants: {
+          size: 'xl'
+        }
+      },
+      textarea: {
+        slots: {
+          root: 'w-full',
+        },
+        defaultVariants: {
+          size: 'xl'
+        }
+      },
       checkbox: {
         defaultVariants: {
           size: 'xl'
@@ -25,6 +41,11 @@ export default defineAppConfig({
       formField: {
         defaultVariants: {
           size: 'xl'
+        }
+      },
+      modal: {
+        slots: {
+          content: 'overflow-y-scroll'
         }
       }
     },

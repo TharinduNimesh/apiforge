@@ -4,6 +4,7 @@
     <UButton
       label="Create New API"
       icon="i-heroicons-plus"
+      color="neutral"
     />
 
     <!-- Modal content slot -->
