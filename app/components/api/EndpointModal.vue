@@ -1,36 +1,21 @@
 <script setup lang="ts">
+import type { ApiEndpoint } from '~/types/api';
 import { ref } from 'vue';
-import type { ApiEndpoint, ApiParameter } from '~/types/api';
 
 interface Props {
-  trigger?: {
-    icon?: string;
-    label?: string;
-    color?: "primary" | "secondary" | "success" | "info" | "warning" | "error" | "neutral";
-    variant?: "solid" | "outline" | "soft" | "ghost" | "link" | "subtle";
-  };
-}
-
-interface SelectOption {
-  label: string;
-  value: string;
-  icon: string;
+  endpoint?: ApiEndpoint;
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  trigger: () => ({
-    icon: 'i-heroicons-plus',
-    label: 'Add Endpoint',
-    color: 'neutral',
-    variant: 'solid'
-  })
+  endpoint: undefined
 });
 
 const emit = defineEmits<{
   (e: 'save', value: ApiEndpoint): void;
 }>();
 
-const endpoint = ref<ApiEndpoint>({
+// Initialize form with either provided endpoint or default values
+const form = ref<ApiEndpoint>(props.endpoint || {
   id: crypto.randomUUID(),
   name: '',
   method: 'GET',
@@ -39,6 +24,12 @@ const endpoint = ref<ApiEndpoint>({
   parameters: [],
   responses: []
 });
+
+interface SelectOption {
+  label: string;
+  value: string;
+  icon: string;
+}
 
 const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
 const parameterTypes = ['string', 'number', 'boolean', 'object', 'array'];
@@ -72,7 +63,7 @@ const rules = {
 };
 
 const addParameter = () => {
-  endpoint.value.parameters.push({
+  form.value.parameters.push({
     name: '',
     in: 'query',
     type: 'string',
@@ -82,11 +73,11 @@ const addParameter = () => {
 };
 
 const removeParameter = (index: number) => {
-  endpoint.value.parameters.splice(index, 1);
+  form.value.parameters.splice(index, 1);
 };
 
 const handleSave = () => {
-  emit('save', endpoint.value);
+  emit('save', form.value);
 };
 
 // Method badge color mapping
@@ -96,27 +87,27 @@ const getMethodColor = (method: string) => {
     case 'POST': return 'info';
     case 'PUT': return 'warning';
     case 'DELETE': return 'error';
+    case 'PATCH': return 'warning';
     default: return 'neutral';
   }
 };
 </script>
 
 <template>
-  <UModal :ui="{ content: 'min-w-[800px]' }">
+  <UModal>
     <UButton
-      :icon="trigger.icon"
-      :label="trigger.label"
-      :color="trigger.color"
-      :variant="trigger.variant"
+      color="neutral"
+      icon="i-heroicons-plus"
+      :label="endpoint ? 'Edit Endpoint' : 'Add Endpoint'"
     />
 
     <template #content>
       <UCard>
         <template #header>
-          <div class="text-lg font-medium">Add Endpoint</div>
+          <div class="text-lg font-medium">{{ endpoint ? 'Edit' : 'Add' }} Endpoint</div>
         </template>
 
-        <div class="space-y-6 p-4">
+        <div class="space-y-6">
           <!-- Basic Endpoint Info -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <UFormField 
@@ -126,14 +117,14 @@ const getMethodColor = (method: string) => {
               required
             >
               <UInput
-                v-model="endpoint.name"
+                v-model="form.name"
                 placeholder="e.g., Get User Details"
               />
             </UFormField>
 
             <UFormField label="HTTP Method" name="method">
               <USelectMenu
-                v-model="endpoint.method"
+                v-model="form.method"
                 :items="httpMethods"
                 class="w-full"
               />
@@ -148,14 +139,14 @@ const getMethodColor = (method: string) => {
             help="Use {paramName} for path parameters"
           >
             <UInput
-              v-model="endpoint.path"
+              v-model="form.path"
               placeholder="/users/{id}"
             />
           </UFormField>
 
           <UFormField label="Description" name="description">
             <UTextarea
-              v-model="endpoint.description"
+              v-model="form.description"
               :rows="3"
               placeholder="Describe what this endpoint does..."
             />
@@ -174,7 +165,7 @@ const getMethodColor = (method: string) => {
               />
             </div>
 
-            <div v-if="endpoint.parameters.length === 0" class="text-center py-8">
+            <div v-if="form.parameters.length === 0" class="text-center py-8">
               <UIcon
                 name="i-heroicons-variable"
                 class="mx-auto h-12 w-12 text-gray-400"
@@ -187,7 +178,7 @@ const getMethodColor = (method: string) => {
 
             <div v-else class="space-y-4">
               <UCard
-                v-for="(param, index) in endpoint.parameters"
+                v-for="(param, index) in form.parameters"
                 :key="index"
                 class="bg-gray-50"
               >

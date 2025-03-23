@@ -116,24 +116,26 @@ const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
 
 <template>
   <UModal :ui="{ content: 'min-w-[600px]' }">
-      <UButton
-        icon="i-heroicons-plus"
-        label="Create Department"
-        color="primary"
-      />
+    <UButton
+      icon="i-heroicons-plus"
+      label="Create Department"
+      color="primary"
+    />
 
     <template #content>
-      <div class="p-4">
-        <div class="flex items-center justify-between mb-6">
-          <h2 class="text-xl font-semibold">Create New Department</h2>
-          <UButton
-            color="neutral"
-            variant="ghost"
-            icon="i-heroicons-x-mark"
-            class="-my-1"
-            @click="handleClose"
-          />
-        </div>
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-semibold">Create New Department</h2>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              class="-my-1"
+              @click="handleClose"
+            />
+          </div>
+        </template>
 
         <form @submit.prevent="handleSubmit" class="space-y-6">
           <!-- Department Name -->
@@ -240,7 +242,7 @@ const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
                         variant="subtle"
                         size="sm"
                       />
-                      <div class="flex-1 min-w-0">
+                      <div class="min-w-0">
                         <div class="font-medium truncate">{{ api.name }}</div>
                         <div class="text-sm text-gray-500 truncate">{{ api.description }}</div>
                       </div>
@@ -287,7 +289,7 @@ const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
             />
           </div>
         </form>
-      </div>
+      </UCard>
     </template>
   </UModal>
 </template>

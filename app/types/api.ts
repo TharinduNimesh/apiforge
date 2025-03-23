@@ -20,11 +20,14 @@ export interface ApiEndpoint {
 
 export interface ApiParameter {
   name: string;
-  in: 'query' | 'path' | 'header' | 'body';
-  required: boolean;
   type: string;
-  description?: string;
-}
+  in: 'query' | 'path' | 'header' | 'body' | 'formData';
+  description: string;
+  required: boolean;
+  fileConfig?: {
+    multiple?: boolean;
+  };
+};
 
 export interface ApiResponse {
   code: number;
