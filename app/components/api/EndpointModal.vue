@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ApiEndpoint } from '~/types/api';
-import { ref } from 'vue';
+import { useToast } from '#imports';
 
 interface Props {
   endpoint?: ApiEndpoint;
@@ -14,8 +14,10 @@ const emit = defineEmits<{
   (e: 'save', value: ApiEndpoint): void;
 }>();
 
-// Initialize form with either provided endpoint or default values
-const form = ref<ApiEndpoint>(props.endpoint || {
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+
+// Create a function to get initial form state
+const getInitialFormState = (): ApiEndpoint => ({
   id: crypto.randomUUID(),
   name: '',
   method: 'GET',
@@ -25,17 +27,106 @@ const form = ref<ApiEndpoint>(props.endpoint || {
   responses: []
 });
 
-interface SelectOption {
-  label: string;
-  value: string;
-  icon: string;
-}
+const state = reactive<ApiEndpoint>(props.endpoint ? { ...props.endpoint } : getInitialFormState());
+const toast = useToast();
+const errors = reactive<Record<string, string>>({});
+const open = ref(false);
+
+const validateForm = () => {
+  errors.name = '';
+  errors.path = '';
+  let isValid = true;
+
+  // Validate name
+  if (!state.name?.trim()) {
+    errors.name = 'Endpoint name is required';
+    isValid = false;
+  }
+
+  // Validate path
+  if (!state.path?.trim()) {
+    errors.path = 'Path is required';
+    isValid = false;
+  } else if (!state.path.startsWith('/')) {
+    errors.path = 'Path must start with /';
+    isValid = false;
+  } else if (!/^[a-zA-Z0-9\-_\/{}]+$/.test(state.path)) {
+    errors.path = 'Path can only contain letters, numbers, hyphens, underscores, and curly braces';
+    isValid = false;
+  }
+
+  // Validate parameters if any exist
+  if (state.parameters?.length) {
+    state.parameters.forEach((param, index) => {
+      if (!param.name?.trim()) {
+        errors[`param${index}`] = 'Parameter name is required';
+        isValid = false;
+      }
+    });
+  }
+
+  return isValid;
+};
+
+const handleSave = async (event: Event) => {
+  event.preventDefault();
+  console.log('Form submission started', { state: JSON.stringify(state) });
+
+  if (!validateForm()) {
+    console.log('Validation errors:', errors);
+    toast.add({
+      title: 'Validation Error',
+      description: Object.values(errors)[0],
+      color: 'error'
+    });
+    return;
+  }
+
+  try {
+    const endpoint: ApiEndpoint = {
+      id: state.id,
+      name: state.name,
+      method: state.method,
+      path: state.path,
+      description: state.description || '',
+      parameters: state.parameters?.map(param => ({
+        ...param,
+        description: param.description || ''
+      })) || [],
+      responses: state.responses || []
+    };
+    
+    console.log('Emitting save event with endpoint:', endpoint);
+    emit('save', endpoint);
+
+    // Reset form
+    Object.assign(state, getInitialFormState());
+    errors.name = '';
+    errors.path = '';
+    
+    toast.add({
+      title: 'Success',
+      description: 'Endpoint saved successfully',
+      color: 'success'
+    });
+
+    // Close modal
+    open.value = false;
+  } catch (error) {
+    console.error('Error saving endpoint:', error);
+    toast.add({
+      title: 'Error',
+      description: 'Failed to save endpoint',
+      color: 'error'
+    });
+  }
+};
 
 const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
 const parameterTypes = ['string', 'number', 'boolean', 'object', 'array'];
 const parameterLocations = ['query', 'path', 'body', 'header'];
 
-const parameterTypeOptions: SelectOption[] = parameterTypes.map(type => ({
+const parameterTypeOptions = parameterTypes.map(type => ({
   label: type.charAt(0).toUpperCase() + type.slice(1),
   value: type,
   icon: type === 'file' ? 'i-heroicons-document' :
@@ -46,7 +137,7 @@ const parameterTypeOptions: SelectOption[] = parameterTypes.map(type => ({
         'i-heroicons-document-text'
 }));
 
-const parameterLocationOptions: SelectOption[] = parameterLocations.map(location => ({
+const parameterLocationOptions = parameterLocations.map(location => ({
   label: location.charAt(0).toUpperCase() + location.slice(1),
   value: location,
   icon: location === 'query' ? 'i-heroicons-question-mark-circle' :
@@ -55,76 +146,66 @@ const parameterLocationOptions: SelectOption[] = parameterLocations.map(location
         'i-heroicons-document'
 }));
 
-// Validation rules
-const rules = {
-  name: (value: string) => !!value || 'Endpoint name is required',
-  path: (value: string) => !!value || 'Path is required',
-  paramName: (value: string) => !!value || 'Parameter name is required'
-};
-
 const addParameter = () => {
-  form.value.parameters.push({
+  console.log('Adding new parameter');
+  if (!state.parameters) state.parameters = [];
+  state.parameters.push({
     name: '',
     in: 'query',
     type: 'string',
     required: true,
     description: ''
   });
+  console.log('Parameters after add:', state.parameters);
 };
 
 const removeParameter = (index: number) => {
-  form.value.parameters.splice(index, 1);
-};
-
-const handleSave = () => {
-  emit('save', form.value);
-};
-
-// Method badge color mapping
-const getMethodColor = (method: string) => {
-  switch (method) {
-    case 'GET': return 'success';
-    case 'POST': return 'info';
-    case 'PUT': return 'warning';
-    case 'DELETE': return 'error';
-    case 'PATCH': return 'warning';
-    default: return 'neutral';
+  if (state.parameters) {
+    state.parameters.splice(index, 1);
   }
 };
 </script>
 
 <template>
-  <UModal>
+  <UModal v-model:open="open" :ui="{ content: 'max-w-3xl' }">
     <UButton
-      color="neutral"
-      icon="i-heroicons-plus"
-      :label="endpoint ? 'Edit Endpoint' : 'Add Endpoint'"
+      :color="endpoint ? 'warning' : 'neutral'"
+      :icon="endpoint ? 'i-heroicons-pencil-square' : 'i-heroicons-plus'"
+      :label="endpoint ? 'Edit' : 'Add Endpoint'"
+      :variant="endpoint ? 'ghost' : 'solid'"
     />
 
     <template #content>
-      <UCard>
-        <template #header>
-          <div class="text-lg font-medium">{{ endpoint ? 'Edit' : 'Add' }} Endpoint</div>
-        </template>
+      <div class="p-6 space-y-6">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900">
+            {{ endpoint ? 'Edit Endpoint' : 'Add New Endpoint' }}
+          </h2>
+          <p class="mt-1 text-sm text-gray-500">
+            {{ endpoint ? 'Update the details of this endpoint.' : 'Define a new API endpoint.' }}
+          </p>
+        </div>
 
-        <div class="space-y-6">
-          <!-- Basic Endpoint Info -->
+        <UForm 
+          :state="state" 
+          class="space-y-6"
+        >
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <UFormField 
               label="Endpoint Name" 
               name="name" 
-              :validate="rules.name"
               required
+              :error="errors.name"
             >
               <UInput
-                v-model="form.name"
+                v-model="state.name"
                 placeholder="e.g., Get User Details"
               />
             </UFormField>
 
             <UFormField label="HTTP Method" name="method">
               <USelectMenu
-                v-model="form.method"
+                v-model="state.method"
                 :items="httpMethods"
                 class="w-full"
               />
@@ -134,19 +215,19 @@ const getMethodColor = (method: string) => {
           <UFormField 
             label="Path" 
             name="path" 
-            :validate="rules.path"
             required
             help="Use {paramName} for path parameters"
+            :error="errors.path"
           >
             <UInput
-              v-model="form.path"
+              v-model="state.path"
               placeholder="/users/{id}"
             />
           </UFormField>
 
           <UFormField label="Description" name="description">
             <UTextarea
-              v-model="form.description"
+              v-model="state.description"
               :rows="3"
               placeholder="Describe what this endpoint does..."
             />
@@ -165,7 +246,7 @@ const getMethodColor = (method: string) => {
               />
             </div>
 
-            <div v-if="form.parameters.length === 0" class="text-center py-8">
+            <div v-if="!state.parameters?.length" class="text-center py-8">
               <UIcon
                 name="i-heroicons-variable"
                 class="mx-auto h-12 w-12 text-gray-400"
@@ -178,7 +259,7 @@ const getMethodColor = (method: string) => {
 
             <div v-else class="space-y-4">
               <UCard
-                v-for="(param, index) in form.parameters"
+                v-for="(param, index) in state.parameters"
                 :key="index"
                 class="bg-gray-50"
               >
@@ -186,9 +267,9 @@ const getMethodColor = (method: string) => {
                   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <UFormField 
                       label="Name" 
-                      :name="`param-${index}-name`"
-                      :validate="rules.paramName"
+                      :name="`parameters.${index}.name`"
                       required
+                      :error="errors[`param${index}`]"
                     >
                       <UInput
                         v-model="param.name"
@@ -196,30 +277,37 @@ const getMethodColor = (method: string) => {
                       />
                     </UFormField>
 
-                    <UFormField label="Type" :name="`param-${index}-type`">
+                    <UFormField 
+                      label="Type" 
+                      :name="`parameters.${index}.type`"
+                    >
                       <USelectMenu
-                        v-model="(param.type as unknown as SelectOption)"
+                        v-model="param.type"
                         :items="parameterTypeOptions"
                         option-value="value"
-                        :ui="{ 
-                          base: 'w-full'
-                        }"
+                        value-key="value"
+                        :ui="{ base: 'w-full' }"
                       />
                     </UFormField>
 
-                    <UFormField label="Location" :name="`param-${index}-location`">
+                    <UFormField 
+                      label="Location" 
+                      :name="`parameters.${index}.in`"
+                    >
                       <USelectMenu
-                        v-model="(param.in as unknown as SelectOption)"
+                        v-model="param.in"
                         :items="parameterLocationOptions"
                         option-value="value"
-                        :ui="{ 
-                          base: 'w-full'
-                        }"
+                        value-key="value"
+                        :ui="{ base: 'w-full' }"
                       />
                     </UFormField>
                   </div>
 
-                  <UFormField label="Description" :name="`param-${index}-description`">
+                  <UFormField 
+                    label="Description" 
+                    :name="`parameters.${index}.description`"
+                  >
                     <UInput
                       v-model="param.description"
                       placeholder="Parameter description"
@@ -227,10 +315,15 @@ const getMethodColor = (method: string) => {
                   </UFormField>
 
                   <div class="flex items-center gap-4">
-                    <UCheckbox
-                      v-model="param.required"
-                      label="Required"
-                    />
+                    <UFormField 
+                      :name="`parameters.${index}.required`" 
+                      class="!mb-0"
+                    >
+                      <UCheckbox
+                        v-model="param.required"
+                        label="Required"
+                      />
+                    </UFormField>
 
                     <div class="flex-grow"></div>
 
@@ -247,16 +340,16 @@ const getMethodColor = (method: string) => {
             </div>
           </div>
 
-          <!-- Footer Actions -->
-          <div class="flex justify-end gap-3">
+          <div class="flex justify-end gap-3 pt-4 border-t">
             <UButton
+              type="submit"
               color="primary"
-              @click="handleSave"
               label="Save Endpoint"
-            />
+              @click="handleSave"
+          />
           </div>
-        </div>
-      </UCard>
+        </UForm>
+      </div>
     </template>
   </UModal>
 </template>

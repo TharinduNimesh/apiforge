@@ -100,7 +100,7 @@ const formattedDate = computed(() => {
         <div class="flex items-center justify-end">
           <!-- Action buttons -->
           <div class="flex gap-2">
-            <template v-if="status === 'INACTIVE' && isAdmin">
+            <template v-if="status === 'INACTIVE' && isAdmin()">
               <UButton 
                 icon="i-heroicons-check"
                 label="Activate"

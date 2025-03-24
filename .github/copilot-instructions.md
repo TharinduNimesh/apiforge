@@ -14,5 +14,6 @@
     </template>
   </UModal>
 </template>
-
 ```
+
+- to customize modal openning and closing, we can use v-model:open prop on UModal component.

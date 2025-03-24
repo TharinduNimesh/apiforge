@@ -106,7 +106,7 @@ const handleDelete = async () => {
     loading.value = true;
     // TODO: Implement delete functionality
     await new Promise(resolve => setTimeout(resolve, 1000));
-    navigateTo('/console/apis');
+    navigateTo('/console');
     useToast().add({
       title: 'Success',
       description: 'API deleted successfully',
@@ -140,7 +140,7 @@ const refreshEndpoints = () => {
               <!-- Left Side -->
               <div class="flex items-center gap-4">
                 <UButton
-                  to="/console/apis"
+                  to="/console"
                   variant="ghost"
                   icon="i-heroicons-arrow-left"
                   color="neutral"
