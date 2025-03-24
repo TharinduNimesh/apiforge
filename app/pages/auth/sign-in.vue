@@ -1,31 +1,52 @@
 <script setup lang="ts">
-const form = reactive({
-    email: '',
-    password: '',
-    remember: false,
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
+import { usePocketBase } from '~/lib/pocketbase'
+
+const pb = usePocketBase();
+const router = useRouter();
+
+const schema = z.object({
+    email: z.string().email('Invalid email address'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    remember: z.boolean().optional()
 });
 
-const schema = {
-    email: {
-        type: 'string',
-        required: true,
-        email: true
-    },
-    password: {
-        type: 'string',
-        required: true,
-        minLength: 8
-    },
-    remember: {
-        type: 'boolean'
+type Schema = z.output<typeof schema>
+
+const state = reactive<Partial<Schema>>({
+    email: '',
+    password: '',
+    remember: false
+});
+
+const toast = useToast()
+
+async function submit(event: FormSubmitEvent<Schema>) {
+    try {
+        const authData = await pb.collection('users').authWithPassword(
+            event.data.email,
+            event.data.password
+        );
+
+        if (pb.authStore.isValid) {
+            toast.add({
+                title: 'Success',
+                description: 'Successfully signed in',
+                color: 'success'
+            });
+
+            console.log(pb.authStore.record);
+            // Redirect to console page after successful login
+            // router.push('/console');
+        }
+    } catch (error: any) {
+        toast.add({
+            title: 'Error',
+            description: error.message || 'Invalid email or password',
+            color: 'error'
+        });
     }
-};
-
-const state = ref(form);
-
-async function submit(event: any) {
-    // TODO: Implement sign in logic
-    console.log(event);
 }
 </script>
 
@@ -38,23 +59,36 @@ async function submit(event: any) {
 
         <UForm :schema="schema" :state="state" class="space-y-6" @submit="submit">
             <UFormField label="Email" name="email">
-                <UInput type="email" placeholder="Enter your email" icon="i-heroicons-envelope" />
+                <UInput 
+                    v-model="state.email"
+                    type="email" 
+                    placeholder="Enter your email" 
+                    icon="i-heroicons-envelope" 
+                />
             </UFormField>
 
             <UFormField label="Password" name="password">
-                <UInput type="password" placeholder="Enter your password" icon="i-heroicons-lock-closed" />
+                <UInput 
+                    v-model="state.password"
+                    type="password" 
+                    placeholder="Enter your password" 
+                    icon="i-heroicons-lock-closed" 
+                />
             </UFormField>
 
             <div class="flex items-center justify-between">
                 <UFormField name="remember" class="!mb-0">
-                    <UCheckbox label="Remember me" />
+                    <UCheckbox 
+                        v-model="state.remember"
+                        label="Remember me" 
+                    />
                 </UFormField>
                 <NuxtLink to="/auth/forgot-password" class="text-sm text-orange-600 hover:text-orange-500">
                     Forgot password?
                 </NuxtLink>
             </div>
 
-            <UButton class="mt-4" type="submit" block>
+            <UButton class="mt-4" type="submit" block color="primary">
                 Sign In
             </UButton>
 

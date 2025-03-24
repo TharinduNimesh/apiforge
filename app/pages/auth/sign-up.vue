@@ -1,44 +1,65 @@
 <script setup lang="ts">
-const form = reactive({
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
+import { usePocketBase } from '~/lib/pocketbase'
+
+const pb = usePocketBase();
+const router = useRouter();
+
+const schema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password_confirmation: z.string().min(8, 'Password must be at least 8 characters'),
+  terms: z.boolean().refine((val) => val === true, 'You must accept the terms and conditions')
+}).refine((data) => data.password === data.password_confirmation, {
+  message: "Passwords don't match",
+  path: ["password_confirmation"]
+});
+
+type Schema = z.output<typeof schema>
+
+const state = reactive<Partial<Schema>>({
   name: '',
   email: '',
   password: '',
   password_confirmation: '',
-  terms: false
+  terms: false,
 });
 
-const schema = {
-  name: {
-    type: 'string',
-    required: true,
-    minLength: 2
-  },
-  email: {
-    type: 'string',
-    required: true,
-    email: true
-  },
-  password: {
-    type: 'string',
-    required: true,
-    minLength: 8
-  },
-  password_confirmation: {
-    type: 'string',
-    required: true,
-    minLength: 8
-  },
-  terms: {
-    type: 'boolean',
-    required: true
+const toast = useToast()
+
+async function submit(event: FormSubmitEvent<Schema>) {
+  try {
+    const data = {
+      email: event.data.email,
+      password: event.data.password,
+      passwordConfirm: event.data.password_confirmation,
+      name: event.data.name,
+      emailVisibility: true,
+      role: 'user'
+    };
+
+    await pb.collection('users').create(data);
+    
+    // Send email verification
+    await pb.collection('users').requestVerification(event.data.email);
+    
+    toast.add({
+      title: 'Success',
+      description: 'Your account has been created. Please check your email to verify your account.',
+      color: 'success'
+    });
+
+    // Redirect to sign in page
+    router.push('/auth/sign-in');
+  } catch (error: any) {
+    toast.add({
+      title: 'Error',
+      description: error.message || 'Something went wrong. Please try again.',
+      color: 'error'
+    })
   }
-};
-
-const state = ref(form);
-
-async function submit(event: any) {
-  // TODO: Implement sign up logic
-  console.log(event);
 }
 </script>
 
@@ -60,6 +81,7 @@ async function submit(event: any) {
         name="name"
       >
         <UInput
+          v-model="state.name"
           type="text"
           placeholder="Enter your name"
           icon="i-heroicons-user"
@@ -71,6 +93,7 @@ async function submit(event: any) {
         name="email"
       >
         <UInput
+          v-model="state.email"
           type="email"
           placeholder="Enter your email"
           icon="i-heroicons-envelope"
@@ -82,6 +105,7 @@ async function submit(event: any) {
         name="password"
       >
         <UInput
+          v-model="state.password"
           type="password"
           placeholder="Create a password"
           icon="i-heroicons-lock-closed"
@@ -93,6 +117,7 @@ async function submit(event: any) {
         name="password_confirmation"
       >
         <UInput
+          v-model="state.password_confirmation"
           type="password"
           placeholder="Confirm your password"
           icon="i-heroicons-lock-closed"
@@ -101,15 +126,19 @@ async function submit(event: any) {
 
       <UFormField
         name="terms"
-        class="!mt-0 "
+        class="!mt-0"
       >
-        <UCheckbox label="I agree to the Terms of Service and Privacy Policy" />
+        <UCheckbox 
+          v-model="state.terms"
+          label="I agree to the Terms of Service and Privacy Policy" 
+        />
       </UFormField>
 
       <UButton
         class="mt-4"
         type="submit"
         block
+        color="primary"
       >
         Create Account
       </UButton>
