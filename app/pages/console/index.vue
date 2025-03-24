@@ -239,7 +239,7 @@ const handleActivateApi = async (apiId: string) => {
 
           <!-- Pagination -->
           <UPagination v-if="pagination.total > pagination.rows" v-model="pagination.page" :total="pagination.total"
-            :page-size="pagination.rows" :page-count="Math.ceil(pagination.total / pagination.rows)" 
+            :page-size="pagination.rows" :page-count="Math.ceil(pagination.total / pagination.rows)"
             @update:model-value="onPageChange" />
         </template>
       </template>

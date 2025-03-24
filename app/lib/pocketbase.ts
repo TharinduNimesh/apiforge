@@ -7,5 +7,6 @@ export function usePocketBase() {
         // Initialize PocketBase if not already initialized
         pb = new PocketBase('https://pocketbase.eversoft.lk');
     }
+
     return pb;
 }

@@ -13,5 +13,13 @@ export default defineNuxtConfig({
   routeRules: {
     "/console": { ssr: false, appMiddleware: "auth" },
     "/console/*/**": { ssr: false, appMiddleware: "auth" },
+    
+    "/console/users": { appMiddleware: ["admin"] },
+    "/console/users/*/**": { appMiddleware: ["admin"] },
+
+    "/console/departments": { appMiddleware: ["admin"] },
+    "/console/departments/*/**": { appMiddleware: ["admin"] },
+
+    "/console/apis/create": { appMiddleware: ["admin"] },
   }
 })
