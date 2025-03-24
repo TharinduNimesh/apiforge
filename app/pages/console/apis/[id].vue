@@ -14,8 +14,6 @@ const api = ref<Api | undefined>();
 const selectedTab = ref('overview');
 const loading = ref(false);
 
-const isAdmin = ref(true); // TODO: Replace with actual auth check
-
 onMounted(() => {
   // For now, use mock data
   api.value = mockApis.find(a => a.id === route.params.id);
@@ -181,7 +179,7 @@ const refreshEndpoints = () => {
 
               <!-- Right Side - Admin Actions -->
               <div class="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-                <template v-if="isAdmin">
+                <template v-if="isAdmin()">
                   <!-- Primary Actions -->
                   <div class="flex gap-2 w-full sm:w-auto">
                     <UButton

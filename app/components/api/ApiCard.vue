@@ -11,7 +11,6 @@ interface ApiProps {
 }
 
 const props = defineProps<ApiProps>();
-const isAdmin = ref(true); // TODO: Replace with actual auth check
 
 const truncateText = (text: string, length: number = 120) => {
   return text.length > length ? text.substring(0, length) + '...' : text;
