@@ -20,11 +20,13 @@ const state = reactive<Partial<Schema>>({
     remember: false
 });
 
+const isLoading = ref(false);
 const toast = useToast()
 
 async function submit(event: FormSubmitEvent<Schema>) {
+    isLoading.value = true;
     try {
-        const authData = await pb.collection('users').authWithPassword(
+        await pb.collection('users').authWithPassword(
             event.data.email,
             event.data.password
         );
@@ -36,9 +38,8 @@ async function submit(event: FormSubmitEvent<Schema>) {
                 color: 'success'
             });
 
-            console.log(pb.authStore.record);
             // Redirect to console page after successful login
-            // router.push('/console');
+            router.push('/console');
         }
     } catch (error: any) {
         toast.add({
@@ -46,6 +47,8 @@ async function submit(event: FormSubmitEvent<Schema>) {
             description: error.message || 'Invalid email or password',
             color: 'error'
         });
+    } finally {
+        isLoading.value = false;
     }
 }
 </script>
@@ -88,7 +91,7 @@ async function submit(event: FormSubmitEvent<Schema>) {
                 </NuxtLink>
             </div>
 
-            <UButton class="mt-4" type="submit" block color="primary">
+            <UButton class="mt-4" type="submit" block color="primary" :loading="isLoading">
                 Sign In
             </UButton>
 

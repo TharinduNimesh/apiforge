@@ -11,9 +11,6 @@
   },
   "dependencies": {
     "@nuxt/ui": "3.0.1",
-    "@prisma/client": "^6.5.0",
-    "@sidebase/nuxt-auth": "0.10.1",
-    "next-auth": "~4.21.1",
     "nuxt": "^3.16.1",
     "pocketbase": "^0.25.2",
     "typescript": "^5.8.2",

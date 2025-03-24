@@ -24,7 +24,7 @@ const fetchApis = async () => {
     useToast().add({
       title: 'Error',
       description: 'Failed to load APIs. Please try again later.',
-      color: 'red',
+      color: 'error',
     });
     apis.value = []; // Reset APIs on error
   } finally {
@@ -40,8 +40,8 @@ onMounted(() => {
 // Add filter state
 const filters = ref({
   search: "",
-  type: "ALL",
-  status: "ALL",
+  type: "ALL" as "ALL" | "FREE" | "PAID",
+  status: "ALL" as "ALL" | "ACTIVE" | "INACTIVE",
   sort: "name",
 });
 
@@ -99,7 +99,6 @@ const onPageChange = (newPage: number) => {
 
 const hasApis = computed(() => apis.value.length > 0);
 const hasFilteredResults = computed(() => filteredApis.value.length > 0);
-const isAdmin = ref(true); // TODO: Replace with actual auth check
 
 const handleActivateApi = async (apiId: string) => {
   try {
@@ -114,14 +113,14 @@ const handleActivateApi = async (apiId: string) => {
     useToast().add({
       title: 'Success',
       description: 'API activated successfully',
-      color: 'green'
+      color: 'success'
     });
   } catch (error) {
     console.error('Error activating API:', error);
     useToast().add({
       title: 'Error',
       description: 'Failed to activate API',
-      color: 'red'
+      color: 'error'
     });
   }
 };
@@ -134,7 +133,7 @@ const handleActivateApi = async (apiId: string) => {
         <h2 class="text-2xl font-semibold leading-tight text-gray-800">
           Available APIs
         </h2>
-        <div v-if="isAdmin">
+        <div v-if="isAdmin()">
           <CreateApiModal @refresh="fetchApis" />
         </div>
       </div>
@@ -150,7 +149,7 @@ const handleActivateApi = async (apiId: string) => {
         <div class="mb-4 flex items-center">
           <USkeleton class="h-6 w-48" />
         </div>
-        
+
         <!-- Grid of skeleton cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
           <div v-for="n in 6" :key="n" class="relative bg-white rounded-lg shadow-sm border border-gray-100 p-6">
@@ -180,13 +179,13 @@ const handleActivateApi = async (apiId: string) => {
             <div class="space-y-2">
               <h3 class="text-lg font-medium text-gray-900">No APIs Available</h3>
               <p class="text-gray-500 max-w-sm mx-auto">
-                {{ isAdmin
+                {{ isAdmin()
                   ? "Start by creating your first API to make it available to users."
                   : "No APIs are currently available. Please check back later."
                 }}
               </p>
             </div>
-            <div v-if="isAdmin">
+            <div v-if="isAdmin()">
               <CreateApiModal @refresh="fetchApis" />
             </div>
           </div>
@@ -204,7 +203,7 @@ const handleActivateApi = async (apiId: string) => {
               </p>
             </div>
             <div>
-              <UButton label="Clear All Filters" icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="filters = {
+              <UButton label="Clear All Filters" icon="i-heroicons-x-mark" color="neutral" variant="ghost" @click="filters = {
                 search: '',
                 type: 'ALL',
                 status: 'ALL',
@@ -235,14 +234,13 @@ const handleActivateApi = async (apiId: string) => {
           <!-- API Grid -->
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
             <ApiCard v-for="api in filteredApis" :key="api.id" v-bind="api"
-              :onActivate="isAdmin ? handleActivateApi : undefined" />
+              :onActivate="isAdmin() ? handleActivateApi : undefined" />
           </div>
 
           <!-- Pagination -->
           <UPagination v-if="pagination.total > pagination.rows" v-model="pagination.page" :total="pagination.total"
-            :page-size="pagination.rows" :page-count="Math.ceil(pagination.total / pagination.rows)" :ui="{
-              wrapper: 'flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1'
-            }" @update:model-value="onPageChange" />
+            :page-size="pagination.rows" :page-count="Math.ceil(pagination.total / pagination.rows)" 
+            @update:model-value="onPageChange" />
         </template>
       </template>
     </div>

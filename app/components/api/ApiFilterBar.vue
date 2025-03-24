@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import type { ApiType } from '~/types/api';
-
 interface Props {
   modelValue: {
     search: string;
-    type: "ALL" | ApiType;
+    type: "ALL" | "FREE" | "PAID";
     status: "ALL" | "ACTIVE" | "INACTIVE";
     sort: string;
   };
@@ -87,14 +85,14 @@ const hasActiveFilters = computed(() => {
         <UTabs
           :content="false"
           :items="typeItems"
-          :model-value="modelValue.type"
+          :model-value="(modelValue.type as string) || 'ALL'"
           @update:model-value="value => updateFilter('type', value)"
           color="neutral"
         />
       </div>
 
       <!-- Status Filters -->
-      <div class="flex items-center gap-3">
+      <div v-if="isAdmin()" class="flex items-center gap-3">
         <span class="text-sm text-gray-500 font-medium">Status:</span>
         <UTabs
           :content="false"
@@ -112,7 +110,7 @@ const hasActiveFilters = computed(() => {
         v-if="hasActiveFilters"
         icon="i-heroicons-x-mark"
         label="Clear Filters"
-        color="gray"
+        color="neutral"
         variant="ghost"
         size="sm"
         @click="clearFilters"
@@ -128,9 +126,7 @@ const hasActiveFilters = computed(() => {
           :search-input="false"
           class="w-[200px]"
           :ui="{ 
-            option: {
               base: 'flex items-center gap-2'
-            }
           }"
         />
       </div>

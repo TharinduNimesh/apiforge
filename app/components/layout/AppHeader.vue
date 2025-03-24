@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from "vue";
+import { usePocketBase } from '~/lib/pocketbase';
+
+const pb = usePocketBase();
+const router = useRouter();
 
 const isScrolled = ref(false);
 const isMobileMenuOpen = ref(false);
@@ -30,34 +34,27 @@ const navigationItems = computed(() => [
 
 // Desktop dropdown menu items - updated for UDropdownMenu format
 const dropdownItems = computed(() => [
-    [
-        {
-            label: user.name,
-            avatar: {
-                text: getUserInitials(user.name)
-            },
-            type: 'label'
-        }
-    ],
-    [
-        {
-            label: "Profile Settings",
-            icon: "i-heroicons-user",
-            to: "/profile",
-        }
-    ],
-    [
-        {
-            label: "Logout",
-            icon: "i-heroicons-power-20-solid",
-            click: () => {
-                // TODO: Implement logout functionality
-                console.log('Logout clicked');
-            },
-            class: "text-red-500 hover:bg-red-50 hover:!text-red-500",
-            slot: "logout"
-        }
-    ]
+    {
+        label: user.name,
+        avatar: {
+            text: getUserInitials(user.name)
+        },
+        disabled: true
+    },
+    {
+        label: "Profile Settings",
+        icon: "i-heroicons-user",
+        click: () => router.push('/profile')
+    },
+    {
+        label: "Logout",
+        class: "text-red-500 hover:!text-red-500",
+        onSelect: () => {
+            pb.authStore.clear();
+            router.push('/auth/sign-in');
+        },
+        slot: "logout"
+    }
 ]);
 
 // Mobile sidebar menu items
@@ -85,8 +82,8 @@ const sidebarMenuItems = computed<MenuItem[]>(() => [
         class: "text-red-500",
         icon: "i-heroicons-power-20-solid",
         click: () => {
-            // TODO: Implement logout functionality
-            console.log('Logout clicked');
+            pb.authStore.clear();
+            router.push('/auth/sign-in');
         },
     },
 ]);
@@ -109,7 +106,6 @@ const toggleMobileMenu = () => {
 };
 
 // Close mobile menu on route change
-const router = useRouter();
 router.afterEach(() => {
     isMobileMenuOpen.value = false;
 });
@@ -133,7 +129,7 @@ const user = {
 
 <template>
     <div class="fixed top-0 left-0 right-0 z-50 px-2 sm:px-4 py-4">
-        <nav class="mx-auto max-w-7xl transition-all duration-300"
+        <nav class="mx-auto max-w-6xl transition-all duration-300"
             :class="[isScrolled ? 'mt-2 rounded-xl shadow-lg' : 'mt-4 rounded-2xl']">
             <div class="relative overflow-hidden rounded-xl">
                 <div class="absolute inset-0 backdrop-blur-xl bg-white/75" :class="{ 'bg-white/85': isScrolled }"></div>
@@ -145,19 +141,21 @@ const user = {
                             </div>
                         </div>
 
-                        <div v-if="user.role === 'admin'" class="hidden md:flex flex-grow mx-8">
+                        <div v-if="isAdmin()" class="hidden md:flex flex-grow mx-8">
                             <ul class="flex items-center gap-2">
                                 <li v-for="item in navigationItems" :key="item.to">
-                                    <NuxtLink :to="item.to"
-                                        class="flex items-center px-4 py-2 rounded-lg text-gray-600 hover:bg-orange-50 hover:text-orange-500 transition-colors relative"
-                                        :class="{
-                                            'text-orange-500 bg-orange-50': $route.path === item.to,
-                                        }">
-                                        <UIcon :name="item.icon" class="mr-2" />
-                                        {{ item.label }}
-                                        <div v-if="$route.path === item.to"
-                                            class="absolute bottom-0 left-0 w-full h-0.5 bg-orange-400 rounded-full">
-                                        </div>
+                                    <NuxtLink :to="item.to" custom v-slot="{ href, navigate, isActive }">
+                                        <a :href="href" @click="navigate"
+                                            class="flex items-center px-4 py-2 rounded-lg text-gray-600 hover:bg-orange-50 hover:text-orange-500 transition-colors relative"
+                                            :class="{
+                                                'text-orange-500 bg-orange-50': isActive,
+                                            }">
+                                            <UIcon :name="item.icon" class="mr-2" />
+                                            {{ item.label }}
+                                            <div v-if="isActive"
+                                                class="absolute bottom-0 left-0 w-full h-0.5 bg-orange-400 rounded-full">
+                                            </div>
+                                        </a>
                                     </NuxtLink>
                                 </li>
                             </ul>
@@ -176,7 +174,7 @@ const user = {
                                     </UButton>
 
                                     <template #logout-leading>
-                                        <UIcon name="i-heroicons-power-20-solid" class="text-red-500 hover:bg-red-50 hover:text-red-500" />
+                                        <UIcon name="i-heroicons-power-20-solid" class="!text-red-500 hover:bg-red-50 hover:text-red-500" />
                                     </template>
                                 </UDropdownMenu>
                             </div>
@@ -214,19 +212,21 @@ const user = {
                         <UButton color="neutral" variant="ghost" icon="i-heroicons-x-mark" class="absolute top-4 right-4"
                             @click="toggleMobileMenu" />
 
-                        <div class="p-4">
+                        <div class="p-4" v-if="isAdmin()">
                             <h4 class="text-xs font-semibold text-gray-500 uppercase mb-3">
                                 Navigation
                             </h4>
                             <ul class="space-y-2">
                                 <li v-for="item in navigationItems" :key="item.to">
-                                    <NuxtLink :to="item.to"
-                                        class="flex items-center px-4 py-3 rounded-lg text-gray-600 hover:bg-orange-50 hover:text-orange-500 transition-colors"
-                                        :class="{
-                                            'text-orange-500 bg-orange-50': $route.path === item.to,
-                                        }">
-                                        <UIcon :name="item.icon" class="mr-3" />
-                                        {{ item.label }}
+                                    <NuxtLink :to="item.to" custom v-slot="{ href, navigate, isActive }">
+                                        <a :href="href" @click="navigate"
+                                            class="flex items-center px-4 py-3 rounded-lg text-gray-600 hover:bg-orange-50 hover:text-orange-500 transition-colors"
+                                            :class="{
+                                                'text-orange-500 bg-orange-50': isActive,
+                                            }">
+                                            <UIcon :name="item.icon" class="mr-3" />
+                                            {{ item.label }}
+                                        </a>
                                     </NuxtLink>
                                 </li>
                             </ul>
@@ -237,12 +237,16 @@ const user = {
                                 <h4 v-if="item.header" :class="item.class">
                                     {{ item.header }}
                                 </h4>
-                                <NuxtLink v-else-if="item.to" :to="item.to"
-                                    class="flex items-center px-4 py-3 rounded-lg text-gray-600 hover:bg-orange-50 hover:text-orange-500 transition-colors"
-                                    :class="item.class">
-                                    <UIcon :name="`${item.icon}`" class="mr-3" />
-                                    {{ item.label }}
-                                </NuxtLink>
+                                <template v-else-if="item.to">
+                                    <NuxtLink :to="item.to" custom v-slot="{ href, navigate }">
+                                        <a :href="href" @click="navigate"
+                                            class="flex items-center px-4 py-3 rounded-lg text-gray-600 hover:bg-orange-50 hover:text-orange-500 transition-colors"
+                                            :class="item.class">
+                                            <UIcon :name="`${item.icon}`" class="mr-3" />
+                                            {{ item.label }}
+                                        </a>
+                                    </NuxtLink>
+                                </template>
                                 <button v-else-if="item.click" @click="item.click"
                                     class="w-full flex items-center px-4 py-3 rounded-lg text-gray-600 hover:bg-orange-50 hover:text-orange-500 transition-colors"
                                     :class="item.class">
