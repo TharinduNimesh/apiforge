@@ -17,6 +17,7 @@ const props = defineProps<{
     isDraft?: boolean;
 }>();
 
+const requestComponent = ref();
 const requestData = ref({});
 const response = ref<any>(null);
 const loading = ref(false);
@@ -79,6 +80,24 @@ const sendRequest = async () => {
         loading.value = false;
     }
 };
+
+const handleResponse = (data: any) => {
+    response.value = data;
+    activeTab.value = 'response';
+};
+
+const handleError = (err: string | null) => {
+    error.value = err;
+    if (err) {
+        activeTab.value = 'response';
+    }
+};
+
+const handleSendRequest = async () => {
+    if (requestComponent.value) {
+        await requestComponent.value.submitRequest();
+    }
+};
 </script>
 
 <template>
@@ -111,8 +130,11 @@ const sendRequest = async () => {
                     >
                         <template #request>
                             <EndpointDrawerRequest
+                                ref="requestComponent"
                                 :endpoint="endpoint"
                                 @update:data="requestData = $event"
+                                @response="handleResponse"
+                                @error="handleError"
                             />
                         </template>
                         <template #response>
@@ -136,6 +158,7 @@ const sendRequest = async () => {
                             label="Send Request"
                             icon="i-heroicons-paper-airplane"
                             :loading="loading"
+                            @click="handleSendRequest"
                         />
                     </div>
                 </div>

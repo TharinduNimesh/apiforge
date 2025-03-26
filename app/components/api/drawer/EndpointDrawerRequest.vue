@@ -6,8 +6,9 @@ const props = defineProps<{
   endpoint: ApiEndpoint;
 }>();
 
-const emit = defineEmits(['update:data']);
+const emit = defineEmits(['update:data', 'response', 'error']);
 const requestData = ref<Record<string, any>>({});
+const loading = ref(false);
 
 // Initialize form data based on endpoint parameters
 const initRequestData = () => {
@@ -42,6 +43,51 @@ const validateForm = () => {
   });
   return errors;
 };
+
+// Expose submit function to parent
+defineExpose({
+  submitRequest: async () => {
+    try {
+      loading.value = true;
+      emit('error', null);
+      emit('response', null);
+
+      const errors = validateForm();
+      if (errors.length > 0) {
+        emit('error', errors.join('\n'));
+        return;
+      }
+
+      // Parse any JSON parameters
+      const processedData = { ...requestData.value };
+      props.endpoint.parameters?.forEach(param => {
+        if (param.type === 'json' && processedData[param.name]) {
+          try {
+            processedData[param.name] = JSON.parse(processedData[param.name]);
+          } catch (e) {
+            throw new Error(`Invalid JSON in parameter ${param.name}`);
+          }
+        }
+      });
+
+      // Make API call using the endpoint ID
+      const response = await $fetch(`/api/call-endpoint/${props.endpoint.id}`, {
+        method: 'POST',
+        body: processedData
+      });
+
+      emit('response', response);
+    } catch (error: any) {
+      console.error('API call error:', error);
+      emit('error', error.message || 'Failed to make API call');
+      if (error.data) {
+        emit('response', { status: error.status, data: error.data });
+      }
+    } finally {
+      loading.value = false;
+    }
+  }
+});
 </script>
 
 <template>
@@ -70,7 +116,7 @@ const validateForm = () => {
       </UCard>
 
       <!-- Parameters Form -->
-      <form v-if="endpoint.parameters?.length" class="space-y-6" @submit.prevent>
+      <div v-if="endpoint.parameters?.length" class="space-y-6">
         <h3 class="text-sm font-medium text-gray-700">Request Parameters</h3>
         <div class="space-y-4">
           <UFormField
@@ -80,7 +126,15 @@ const validateForm = () => {
             :required="param.required"
           >
             <template #description>
-              <span class="text-xs text-gray-500">{{ param.description }}</span>
+              <div class="flex items-center gap-2 text-xs text-gray-500">
+                <span>{{ param.description }}</span>
+                <UBadge
+                  :label="param.param_in"
+                  color="neutral"
+                  variant="subtle"
+                  size="xs"
+                />
+              </div>
             </template>
             <template #default>
               <template v-if="param.type === 'json'">
@@ -113,7 +167,7 @@ const validateForm = () => {
             </template>
           </UFormField>
         </div>
-      </form>
+      </div>
     </div>
   </div>
 </template>

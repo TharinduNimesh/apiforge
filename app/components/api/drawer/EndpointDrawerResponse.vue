@@ -119,10 +119,15 @@ const errorDetails = computed(() => {
               :class="{ 'max-h-[300px] overflow-hidden': !isExpanded }"
               class="relative"
             >
-              <UCodeBlock
+            <pre>
+              <code class="text-sm text-gray-700 font-mono">
+                {{ response.data ? JSON.stringify(response.data, null, 2) : JSON.stringify(response, null, 2) }}
+              </code>
+            </pre>
+              <!-- <UCodeBlock
                 :code="JSON.stringify(response.data || response, null, 2)"
                 language="json"
-              />
+              /> -->
               
               <!-- Fade Overlay -->
               <div

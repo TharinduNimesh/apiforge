@@ -21,5 +21,9 @@ export default defineNuxtConfig({
     "/console/departments/*/**": { appMiddleware: ["admin"] },
 
     "/console/apis/create": { appMiddleware: ["admin"] },
+  },
+
+  runtimeConfig: {
+    PB_SUPER_ADMIN_KEY: process.env.PB_SUPER_ADMIN_KEY,
   }
 })
