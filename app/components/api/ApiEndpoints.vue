@@ -51,15 +51,7 @@ const getMethodColor = (method: string): NuxtUIColor => {
 };
 
 const handleAddEndpoint = () => {
-  selectedEndpoint.value = {
-    id: crypto.randomUUID(),
-    name: '',
-    method: 'GET',
-    path: '',
-    description: '',
-    parameters: [],
-    responses: []
-  };
+  selectedEndpoint.value = null;
   showEndpointModal.value = true;
 };
 
@@ -177,6 +169,18 @@ const confirmDelete = (endpoint: ApiEndpoint) => {
   selectedEndpoint.value = endpoint;
 };
 
+const showDeleteModal = ref(false);
+
+const handleShowDeleteModal = (endpoint: ApiEndpoint) => {
+  selectedEndpoint.value = endpoint;
+  showDeleteModal.value = true;
+};
+
+const handleCancelDelete = () => {
+  showDeleteModal.value = false;
+  selectedEndpoint.value = null;
+};
+
 interface EndpointAccordionItem extends ApiEndpoint {
   label: string;
   color: NuxtUIColor;
@@ -271,13 +275,14 @@ const endpointItems = computed<EndpointAccordionItem[]>(() => {
                     :api="{ id: endpoint.id }"
                   />
                   <!-- Delete Modal -->
-                  <UModal>
+                  <UModal v-model:open="showDeleteModal">
                     <UButton
                       v-if="isActive"
                       color="error"
                       variant="ghost"
                       icon="i-heroicons-trash"
                       size="sm"
+                      @click="handleShowDeleteModal(endpoint)"
                     />
 
                     <template #content>
@@ -314,6 +319,7 @@ const endpointItems = computed<EndpointAccordionItem[]>(() => {
                               variant="ghost"
                               label="Cancel"
                               :disabled="loading"
+                              @click="handleCancelDelete"
                             />
                             <UButton
                               color="error"
@@ -390,6 +396,7 @@ const endpointItems = computed<EndpointAccordionItem[]>(() => {
   <EndpointModal
     v-if="selectedEndpoint"
     :endpoint="selectedEndpoint"
+    v-model:open="showEndpointModal"
     @save="handleSaveEndpoint"
   />
 </template>

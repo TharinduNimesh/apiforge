@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   (e: 'save', value: ApiEndpoint): void;
+  (e: 'update:open', value: boolean): void;
 }>();
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -98,6 +99,7 @@ const handleSave = async (event: Event) => {
     
     console.log('Emitting save event with endpoint:', endpoint);
     emit('save', endpoint);
+    emit('update:open', false); // Close modal after save
 
     // Reset form
     Object.assign(state, getInitialFormState());
@@ -120,6 +122,10 @@ const handleSave = async (event: Event) => {
       color: 'error'
     });
   }
+};
+
+const handleCancel = () => {
+  emit('update:open', false);
 };
 
 const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
@@ -342,11 +348,17 @@ const removeParameter = (index: number) => {
 
           <div class="flex justify-end gap-3 pt-4 border-t">
             <UButton
+              color="neutral"
+              variant="ghost"
+              label="Cancel"
+              @click="handleCancel"
+            />
+            <UButton
               type="submit"
               color="primary"
               label="Save Endpoint"
               @click="handleSave"
-          />
+            />
           </div>
         </UForm>
       </div>

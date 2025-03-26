@@ -148,6 +148,7 @@ const tabs = [
 const handleArchive = async () => {
   try {
     loading.value = true;
+    // Update the API record to set isActive to false
     await pb.collection('apis').update(api.value?.id as string, {
       isActive: false
     });
@@ -158,6 +159,7 @@ const handleArchive = async () => {
       color: 'success'
     });
   } catch (error) {
+    console.error('Error archiving API:', error);
     useToast().add({
       title: 'Error',
       description: 'Failed to archive API',
@@ -165,12 +167,14 @@ const handleArchive = async () => {
     });
   } finally {
     loading.value = false;
+    showArchiveModal.value = false;
   }
 };
 
 const handleUnarchive = async () => {
   try {
     loading.value = true;
+    // Update the API record to set isActive to true
     await pb.collection('apis').update(api.value?.id as string, {
       isActive: true
     });
@@ -181,6 +185,7 @@ const handleUnarchive = async () => {
       color: 'success'
     });
   } catch (error) {
+    console.error('Error restoring API:', error);
     useToast().add({
       title: 'Error',
       description: 'Failed to restore API',
@@ -188,13 +193,16 @@ const handleUnarchive = async () => {
     });
   } finally {
     loading.value = false;
+    showArchiveModal.value = false;
   }
 };
 
 const handleDelete = async () => {
   try {
     loading.value = true;
+    // Completely delete the API record
     await pb.collection('apis').delete(api.value?.id as string);
+    // Navigate back to the console after successful deletion
     navigateTo('/console');
     useToast().add({
       title: 'Success',
@@ -202,6 +210,7 @@ const handleDelete = async () => {
       color: 'success'
     });
   } catch (error) {
+    console.error('Error deleting API:', error);
     useToast().add({
       title: 'Error',
       description: 'Failed to delete API',
@@ -215,6 +224,25 @@ const handleDelete = async () => {
 const refreshEndpoints = async () => {
   cleanup(); // Cancel any pending requests before refreshing
   await fetchEndpoints();
+};
+
+const showArchiveModal = ref(false);
+const showDeleteModal = ref(false);
+
+const handleShowArchiveModal = () => {
+  showArchiveModal.value = true;
+};
+
+const handleShowDeleteModal = () => {
+  showDeleteModal.value = true;
+};
+
+const handleCancelArchive = () => {
+  showArchiveModal.value = false;
+};
+
+const handleCancelDelete = () => {
+  showDeleteModal.value = false;
 };
 </script>
 
@@ -284,12 +312,13 @@ const refreshEndpoints = async () => {
                     </UButton>
                     
                     <!-- Archive/Unarchive Button -->
-                    <UModal>
+                    <UModal v-model:open="showArchiveModal">
                       <UButton
                         icon="i-heroicons-archive-box"
                         :color="api.status === 'ACTIVE' ? 'warning' : 'success'"
                         variant="ghost"
                         class="flex-1 sm:flex-none"
+                        @click="handleShowArchiveModal"
                       >
                         {{ api.status === 'ACTIVE' ? 'Archive' : 'Restore' }}
                       </UButton>
@@ -320,17 +349,28 @@ const refreshEndpoints = async () => {
                                 variant="ghost"
                                 type="button"
                                 :disabled="loading"
+                                @click="handleCancelArchive"
                               >
                                 Cancel
                               </UButton>
-                              <UButton
-                                :color="api.status === 'ACTIVE' ? 'warning' : 'success'"
-                                :icon="api.status === 'ACTIVE' ? 'i-heroicons-archive-box' : 'i-heroicons-arrow-path'"
+                                <UButton
+                                v-if="api.status === 'ACTIVE'"
+                                color="warning"
+                                icon="i-heroicons-archive-box"
                                 :loading="loading"
-                                @click="api.status === 'ACTIVE' ? handleArchive : handleUnarchive"
-                              >
-                                {{ api.status === 'ACTIVE' ? 'Archive' : 'Restore' }}
-                              </UButton>
+                                @click="handleArchive"
+                                >
+                                Archive
+                                </UButton>
+                                <UButton
+                                v-if="api.status !== 'ACTIVE'"
+                                color="success"
+                                icon="i-heroicons-arrow-path"
+                                :loading="loading"
+                                @click="handleUnarchive"
+                                >
+                                Restore
+                                </UButton>
                             </div>
                           </template>
                         </UCard>
@@ -338,13 +378,14 @@ const refreshEndpoints = async () => {
                     </UModal>
 
                     <!-- Delete Button (Only shown for archived APIs) -->
-                    <UModal>
+                    <UModal v-model:open="showDeleteModal">
                       <UButton
                         v-if="api.status !== 'ACTIVE'"
                         icon="i-heroicons-trash"
                         color="error"
                         variant="ghost"
                         class="flex-1 sm:flex-none"
+                        @click="handleShowDeleteModal"
                       >
                         Delete
                       </UButton>
@@ -369,6 +410,7 @@ const refreshEndpoints = async () => {
                                 variant="ghost"
                                 type="button"
                                 :disabled="loading"
+                                @click="handleCancelDelete"
                               >
                                 Cancel
                               </UButton>
