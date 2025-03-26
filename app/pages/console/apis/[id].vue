@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import type { Api, ApiEndpoint } from '~/types/api';
-import { mockApis } from '~/data/mockApis';
-import { mockEndpoints } from '~/data/mockEndpoints';
 import { ref, computed } from 'vue';
 import EndpointModal from '~/components/api/EndpointModal.vue';
+import { usePocketBase } from '~/lib/pocketbase';
 
 definePageMeta({
   layout: 'console'
@@ -13,20 +12,111 @@ const route = useRoute();
 const api = ref<Api | undefined>();
 const selectedTab = ref('overview');
 const loading = ref(false);
+const pb = usePocketBase();
 
-onMounted(() => {
-  // For now, use mock data
-  api.value = mockApis.find(a => a.id === route.params.id);
-  
-  if (!api.value) {
+const fetchApi = async () => {
+  try {
+    loading.value = true;
+    const record = await pb.collection('api_details').getOne(route.params.id as string);
+    
+    if (!record) {
+      throw new Error('API not found');
+    }
+
+    // Transform the record to match our Api type
+    api.value = {
+      id: record.id,
+      name: record.name,
+      description: record.description,
+      type: record.type,
+      status: record.status ? 'ACTIVE' : 'INACTIVE',
+      rateLimit: record.rateLimit,
+      endpointCount: record.endpointCount,
+      createdAt: record.createdAt
+    };
+  } catch (error) {
+    console.error('Error fetching API:', error);
     showError({ statusCode: 404, message: 'API not found' });
+  } finally {
+    loading.value = false;
   }
+};
+
+const endpoints = ref<ApiEndpoint[]>([]);
+
+const fetchEndpoints = async () => {
+  try {
+    if (!api.value?.id) return;
+    
+    // Create an AbortController for the main request
+    const controller = new AbortController();
+    
+    // Get endpoints first
+    const endpointRecords = await pb.collection('endpoints').getFullList({
+      filter: `api = "${api.value.id}"`,
+      requestKey: `endpoints-${api.value.id}` // Add unique request key
+    });
+
+    // Then fetch parameters for each endpoint
+    const endpointPromises = endpointRecords.map(async (record) => {
+      // Fetch parameters for this endpoint with a unique request key
+      const parameters = await pb.collection('parameters').getFullList({
+        filter: `endpoint = "${record.id}"`,
+        requestKey: `parameters-${record.id}` // Add unique request key
+      });
+      
+      return {
+        id: record.id,
+        name: record.name,
+        description: record.description,
+        path: record.path,
+        method: record.method,
+        parameters: parameters.map(param => ({
+          id: param.id,
+          name: param.name,
+          description: param.description,
+          type: param.type,
+          required: param.required,
+          in: param.param_in
+        })),
+        responses: []
+      };
+    });
+
+    // Wait for all parameter requests to complete
+    endpoints.value = await Promise.all(endpointPromises);
+
+  } catch (error: any) {
+    // Only show error if it's not an auto-cancellation
+    if (!error.isAbort) {
+      console.error('Error fetching endpoints:', error);
+      useToast().add({
+        title: 'Error',
+        description: 'Failed to load endpoints',
+        color: 'error'
+      });
+    }
+  }
+};
+
+// Cleanup function to cancel any pending requests
+const cleanup = () => {
+  if (api.value?.id) {
+    pb.cancelRequest(`endpoints-${api.value.id}`);
+    endpoints.value.forEach(endpoint => {
+      pb.cancelRequest(`parameters-${endpoint.id}`);
+    });
+  }
+};
+
+// Setup lifecycle hooks
+onMounted(async () => {
+  await fetchApi();
+  await fetchEndpoints();
 });
 
-// Initialize with the mock endpoints for the current API
-const endpoints = computed(() => {
-  if (!api.value?.id) return [];
-  return mockEndpoints[api.value.id] || [];
+onBeforeUnmount(() => {
+  cleanup();
 });
 
 const formattedDate = computed(() => {
@@ -58,8 +148,9 @@ const tabs = [
 const handleArchive = async () => {
   try {
     loading.value = true;
-    // TODO: Implement archive functionality
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await pb.collection('apis').update(api.value?.id as string, {
+      isActive: false
+    });
     if (api.value) api.value.status = 'INACTIVE';
     useToast().add({
       title: 'Success',
@@ -80,8 +171,9 @@ const handleArchive = async () => {
 const handleUnarchive = async () => {
   try {
     loading.value = true;
-    // TODO: Implement unarchive functionality
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await pb.collection('apis').update(api.value?.id as string, {
+      isActive: true
+    });
     if (api.value) api.value.status = 'ACTIVE';
     useToast().add({
       title: 'Success',
@@ -102,8 +194,7 @@ const handleUnarchive = async () => {
 const handleDelete = async () => {
   try {
     loading.value = true;
-    // TODO: Implement delete functionality
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await pb.collection('apis').delete(api.value?.id as string);
     navigateTo('/console');
     useToast().add({
       title: 'Success',
@@ -121,9 +212,9 @@ const handleDelete = async () => {
   }
 };
 
-const refreshEndpoints = () => {
-  // TODO: Implement endpoints refresh
-  console.log('Refreshing endpoints...');
+const refreshEndpoints = async () => {
+  cleanup(); // Cancel any pending requests before refreshing
+  await fetchEndpoints();
 };
 </script>
 
@@ -346,8 +437,8 @@ const refreshEndpoints = () => {
                             Rate Limit
                           </h3>
                           <div class="flex items-baseline gap-2">
-                            <span class="text-2xl font-bold text-primary-600">100</span>
-                            <span class="text-gray-500">requests/hour</span>
+                            <span class="text-2xl font-bold text-primary-600">{{ api.rateLimit || 'No limit' }}</span>
+                            <span class="text-gray-500" v-if="api.rateLimit">requests/hour</span>
                           </div>
                         </div>
                         <div class="bg-gray-50/80 p-5 rounded-lg border border-gray-100">

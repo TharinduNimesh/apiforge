@@ -4,6 +4,7 @@ import { ref, computed } from 'vue';
 import EndpointModal from './EndpointModal.vue';
 import { mockEndpoints } from '~/data/mockEndpoints';
 import EndpointDrawer from './drawer/EndpointDrawer.vue';
+import { usePocketBase } from '~/lib/pocketbase';
 
 type NuxtUIColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral';
 
@@ -13,6 +14,7 @@ interface Props {
   isActive?: boolean;
 }
 
+const pb = usePocketBase();
 const props = withDefaults(defineProps<Props>(), {
   endpoints: () => [],
   isActive: true
@@ -69,10 +71,52 @@ const handleEditEndpoint = (endpoint: ApiEndpoint) => {
 const handleSaveEndpoint = async (endpoint: ApiEndpoint) => {
   try {
     loading.value = true;
-    // In a real app, this would be an API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Update the endpoints list
+    // Create or update endpoint
+    let endpointRecord;
+    const endpointData = {
+      name: endpoint.name,
+      description: endpoint.description,
+      path: endpoint.path,
+      method: endpoint.method,
+      api: props.apiId
+    };
+
+    if (endpoint.id) {
+      // Update existing endpoint
+      endpointRecord = await pb.collection('endpoints').update(endpoint.id, endpointData);
+    } else {
+      // Create new endpoint
+      endpointRecord = await pb.collection('endpoints').create(endpointData);
+    }
+
+    // Handle parameters
+    if (endpoint.parameters?.length) {
+      // Delete existing parameters if updating
+      if (endpoint.id) {
+        const existingParams = await pb.collection('parameters').getFullList({
+          filter: `endpoint = "${endpoint.id}"`
+        });
+        
+        for (const param of existingParams) {
+          await pb.collection('parameters').delete(param.id);
+        }
+      }
+
+      // Create new parameters
+      for (const param of endpoint.parameters) {
+        await pb.collection('parameters').create({
+          name: param.name,
+          description: param.description,
+          type: param.type,
+          param_in: param.in,
+          required: param.required,
+          endpoint: endpointRecord.id
+        });
+      }
+    }
+    
+    // Refresh the endpoints list
     emit('refresh');
     
     useToast().add({
@@ -81,6 +125,7 @@ const handleSaveEndpoint = async (endpoint: ApiEndpoint) => {
       color: 'success'
     });
   } catch (error) {
+    console.error('Error saving endpoint:', error);
     useToast().add({
       title: 'Error',
       description: 'Failed to save endpoint',
@@ -96,8 +141,18 @@ const handleDeleteEndpoint = async () => {
   
   try {
     loading.value = true;
-    // TODO: Implement API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Delete all parameters first
+    const existingParams = await pb.collection('parameters').getFullList({
+      filter: `endpoint = "${selectedEndpoint.value.id}"`
+    });
+    
+    for (const param of existingParams) {
+      await pb.collection('parameters').delete(param.id);
+    }
+    
+    // Then delete the endpoint
+    await pb.collection('endpoints').delete(selectedEndpoint.value.id);
     
     useToast().add({
       title: 'Success',
@@ -107,6 +162,7 @@ const handleDeleteEndpoint = async () => {
     
     emit('refresh');
   } catch (error) {
+    console.error('Error deleting endpoint:', error);
     useToast().add({
       title: 'Error',
       description: 'Failed to delete endpoint',
@@ -185,13 +241,13 @@ const endpointItems = computed<EndpointAccordionItem[]>(() => {
           <template v-for="endpoint in endpoints" :key="endpoint.id">
             <tr class="hover:bg-gray-50">
               <td class="pl-4">
-                <button 
-                  class="p-1 hover:bg-gray-100 rounded-md transition-transform duration-200"
-                  :class="{ 'rotate-90': expandedRows.has(endpoint.id) }"
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  :icon="expandedRows.has(endpoint.id) ? 'i-heroicons-chevron-down' : 'i-heroicons-chevron-right'"
                   @click="toggleRow(endpoint.id)"
-                >
-                  <UIcon name="i-heroicons-chevron-right" class="w-4 h-4 text-gray-400"/>
-                </button>
+                />
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                 {{ endpoint.name }}

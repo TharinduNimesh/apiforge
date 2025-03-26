@@ -5,20 +5,33 @@ definePageMeta({
 
 import { ref, computed } from 'vue';
 import type { Api as ApiType } from '~/types/api';
-import { mockApis } from '~/data/mockApis';
+import { usePocketBase } from '~/lib/pocketbase';
 import CreateApiModal from '~/components/api/CreateApiModal.vue'
 
 // Initialize with empty array and fetch on client side only to avoid hydration issues
 const apis = ref<ApiType[]>([]);
 const loading = ref(true);
+const pb = usePocketBase();
 
 // Add fetch function that runs only on client side
 const fetchApis = async () => {
   try {
     loading.value = true;
-    // Mock API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    apis.value = mockApis;
+    const records = await pb.collection('api_details').getFullList({
+      sort: '-createdAt'
+    });
+
+    // Transform records to match ApiType interface
+    apis.value = records.map(record => ({
+      id: record.id,
+      name: record.name as string,
+      description: record.description as string,
+      type: record.type as 'FREE' | 'PAID',
+      status: record.status ? 'ACTIVE' : 'INACTIVE',
+      rateLimit: record.rateLimit as number,
+      endpointCount: record.endpointCount as number,
+      createdAt: record.createdAt as string
+    }));
   } catch (error: any) {
     console.error('Error fetching APIs:', error);
     useToast().add({
@@ -102,13 +115,13 @@ const hasFilteredResults = computed(() => filteredApis.value.length > 0);
 
 const handleActivateApi = async (apiId: string) => {
   try {
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Update API status in PocketBase
+    await pb.collection('apis').update(apiId, {
+      isActive: true
+    });
 
-    // Update local state to simulate API activation
-    apis.value = apis.value.map(api =>
-      api.id === apiId ? { ...api, status: 'ACTIVE' } : api
-    );
+    // Refresh the API list to get updated data
+    await fetchApis();
 
     useToast().add({
       title: 'Success',

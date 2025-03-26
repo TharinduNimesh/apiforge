@@ -6,18 +6,34 @@ definePageMeta({
 import { ref, computed, onMounted, h, resolveComponent } from 'vue';
 import type { User } from '~/types/user';
 import type { TableColumn } from '@nuxt/ui';
-import { mockUsers } from '~/data/mockUsers';
+import { usePocketBase } from '~/lib/pocketbase';
+
+const pb = usePocketBase();
 
 const UBadge = resolveComponent('UBadge');
 
-const users = ref<User[]>(mockUsers);
+const users = ref<User[]>([]);
 const loading = ref(true);
 
 const fetchUsers = async () => {
   try {
     loading.value = true;
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    users.value = mockUsers;
+    const records = await pb.collection('users').getFullList<{
+      id: string;
+      name: string;
+      email: string;
+      role?: string;
+      created: string;
+    }>({
+      sort: '-created',
+    });
+    users.value = records.map(record => ({
+      id: record.id,
+      name: record.name,
+      email: record.email,
+      role: record.role === 'admin' ? 'admin' : 'user',
+      createdAt: record.created,
+    }));
   } catch (error) {
     console.error('Error fetching users:', error);
     useToast().add({
@@ -112,7 +128,12 @@ const columns: TableColumn<User>[] = [
     accessorKey: 'createdAt',
     header: 'Joined',
     cell: ({ row }) => {
-      return new Date(row.getValue('createdAt')).toLocaleDateString()
+      const date = new Date(row.getValue('createdAt'));
+      return date.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
     }
   }
 ];

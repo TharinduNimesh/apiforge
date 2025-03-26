@@ -4,6 +4,7 @@ export interface Api {
   description: string;
   type: 'FREE' | 'PAID';
   status: 'ACTIVE' | 'INACTIVE';
+  rateLimit: number;
   endpointCount: number;
   createdAt: string;
 }
