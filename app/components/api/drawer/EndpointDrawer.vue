@@ -17,18 +17,18 @@ const props = defineProps<{
     isDraft?: boolean;
 }>();
 
-const requestComponent = ref();
+const requestRef = ref();
 const requestData = ref({});
 const response = ref<any>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
-const activeTab = ref('request'); // Set request as default tab
+const currentTab = ref('request'); // Set request as default tab
 
 // Reset state when drawer opens
 watch(() => requestData.value, (newValue) => {
     response.value = null;
     error.value = null;
-    activeTab.value = 'request';
+    currentTab.value = 'request';
 }, { deep: true });
 
 const sendRequest = async () => {
@@ -73,7 +73,7 @@ const sendRequest = async () => {
             };
         }
         
-        activeTab.value = 'response';
+        currentTab.value = 'response';
     } catch (err: any) {
         error.value = err.message || 'An error occurred';
     } finally {
@@ -83,19 +83,28 @@ const sendRequest = async () => {
 
 const handleResponse = (data: any) => {
     response.value = data;
-    activeTab.value = 'response';
+    if (data && !error.value) {
+        currentTab.value = 'response';
+    }
 };
 
 const handleError = (err: string | null) => {
     error.value = err;
-    if (err) {
-        activeTab.value = 'response';
-    }
+};
+
+const handleLoading = (isLoading: boolean) => {
+    loading.value = isLoading;
 };
 
 const handleSendRequest = async () => {
-    if (requestComponent.value) {
-        await requestComponent.value.submitRequest();
+    if (loading.value) return;
+    
+    // Reset state
+    response.value = null;
+    error.value = null;
+    
+    if (requestRef.value) {
+        await requestRef.value.submitRequest();
     }
 };
 </script>
@@ -113,12 +122,12 @@ const handleSendRequest = async () => {
         <template #content>
             <div class="!w-full md:!w-[700px] lg:!w-[900px] flex flex-col h-full">
                 <!-- Header -->
-                <EndpointDrawerHeader :endpoint="endpoint" />
+                <EndpointDrawerHeader :endpoint="endpoint" :loading="loading" @send="handleSendRequest" />
 
                 <!-- Main Content -->
                 <div class="flex-1 overflow-hidden border-y border-gray-100">
                     <UTabs
-                        v-model="activeTab"
+                        v-model="currentTab"
                         :items="[
                             { label: 'Request', slot: 'request', value: 'request' },
                             { label: 'Response', slot: 'response', value: 'response' }
@@ -130,17 +139,19 @@ const handleSendRequest = async () => {
                     >
                         <template #request>
                             <EndpointDrawerRequest
-                                ref="requestComponent"
+                                ref="requestRef"
                                 :endpoint="endpoint"
                                 @update:data="requestData = $event"
                                 @response="handleResponse"
                                 @error="handleError"
+                                @loading="handleLoading"
                             />
                         </template>
                         <template #response>
                             <EndpointDrawerResponse
                                 :response="response"
                                 :error="error"
+                                :loading="loading"
                             />
                         </template>
                     </UTabs>

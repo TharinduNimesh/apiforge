@@ -4,15 +4,20 @@ import { ref, computed } from 'vue';
 const props = defineProps<{
   response: any;
   error: string | null;
+  loading: boolean;
 }>();
 
-const copySuccess = ref(false);
 const isExpanded = ref(false);
-const MAX_HEIGHT = 300;
+const copySuccess = ref(false);
+
+const responseData = computed(() => {
+  if (!props.response) return null;
+  return props.response.data || null;
+});
 
 const copyToClipboard = async () => {
   if (props.response) {
-    await navigator.clipboard.writeText(JSON.stringify(props.response, null, 2));
+    await navigator.clipboard.writeText(JSON.stringify(responseData.value, null, 2));
     copySuccess.value = true;
     setTimeout(() => copySuccess.value = false, 2000);
   }
@@ -20,9 +25,9 @@ const copyToClipboard = async () => {
 
 // Status tag properties
 const statusTag = computed(() => {
-  if (!props.response?.status) return { label: 'Unknown', color: 'neutral' };
+  if (!props.response?.statusCode) return { label: 'Unknown', color: 'neutral' };
   
-  const status = props.response.status;
+  const status = props.response.statusCode;
   if (status >= 200 && status < 300) {
     return { label: 'Success', color: 'success' };
   } else if (status >= 400 && status < 500) {
@@ -73,7 +78,14 @@ const errorDetails = computed(() => {
 <template>
   <div class="h-full overflow-auto">
     <div class="p-6 space-y-6">
-      <div v-if="!response && !error" class="text-center py-12">
+      <!-- Loading State -->
+      <div v-if="loading" class="text-center py-12">
+        <UIcon name="i-heroicons-arrow-path" class="w-12 h-12 text-gray-300 mb-4 animate-spin" />
+        <p class="text-gray-500">Processing request...</p>
+      </div>
+
+      <!-- Initial State -->
+      <div v-else-if="!response && !error" class="text-center py-12">
         <UIcon name="i-heroicons-paper-airplane" class="w-12 h-12 text-gray-300 mb-4" />
         <p class="text-gray-500">Send a request to see the response</p>
       </div>
@@ -85,59 +97,50 @@ const errorDetails = computed(() => {
           :title="errorDetails.type"
           :description="errorDetails.message || undefined"
           :color="(errorDetails.color as any) || undefined"
+          variant="soft"
+          icon="i-heroicons-exclamation-triangle"
         />
 
         <!-- Response Section -->
-        <div v-if="response" class="space-y-4">
+        <div v-if="responseData" class="space-y-4">
           <div class="flex items-center justify-between">
-            <UBadge
-              :color="(statusTag.color as any)"
-              :label="statusTag.label"
-              variant="subtle"
-            />
+            <div class="flex items-center gap-2">
+              <UBadge
+                :color="(statusTag.color as any)"
+                :label="statusTag.label"
+                variant="subtle"
+              />
+              <span v-if="response.statusCode" class="text-sm text-gray-600">
+                Status: {{ response.statusCode }}
+              </span>
+            </div>
             <UButton
               icon="i-heroicons-clipboard"
               color="neutral"
               variant="ghost"
               class="rounded-full"
-              :class="{ '!text-green-500': copySuccess }"
+              :class="{ '!text-success-500': copySuccess }"
               @click="copyToClipboard"
             />
           </div>
 
-          <!-- Status Info -->
-          <div v-if="response.status" class="text-sm">
-            <strong class="text-gray-700">Status:</strong>
-            <span class="text-gray-600 ml-2">{{ response.status }}</span>
-          </div>
-
           <!-- Response Body -->
-          <UCard
-            class="relative"
-          >
+          <UCard>
             <div
               :class="{ 'max-h-[300px] overflow-hidden': !isExpanded }"
               class="relative"
             >
-            <pre>
-              <code class="text-sm text-gray-700 font-mono">
-                {{ response.data ? JSON.stringify(response.data, null, 2) : JSON.stringify(response, null, 2) }}
-              </code>
-            </pre>
-              <!-- <UCodeBlock
-                :code="JSON.stringify(response.data || response, null, 2)"
-                language="json"
-              /> -->
+              <pre><code class="text-sm text-gray-700 font-mono whitespace-pre-wrap">{{ JSON.stringify(responseData, null, 2) }}</code></pre>
               
               <!-- Fade Overlay -->
               <div
-                v-if="!isExpanded"
+                v-if="!isExpanded && !loading"
                 class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-gray-50 to-transparent"
               />
             </div>
 
             <!-- Expand Button -->
-            <div class="absolute bottom-4 left-0 right-0 flex justify-center">
+            <div v-if="!loading" class="absolute bottom-4 left-0 right-0 flex justify-center">
               <UButton
                 :label="isExpanded ? 'Show Less' : 'Show More'"
                 :icon="isExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"

@@ -22,7 +22,7 @@ export interface ApiEndpoint {
 export interface ApiParameter {
   name: string;
   type: string;
-  in: 'query' | 'path' | 'header' | 'body' | 'formData';
+  param_in: 'query' | 'path' | 'header' | 'body' | 'formData';
   description: string;
   required: boolean;
   fileConfig?: {

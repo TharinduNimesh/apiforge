@@ -6,7 +6,13 @@ const props = defineProps<{
   endpoint: ApiEndpoint;
 }>();
 
-const emit = defineEmits(['update:data', 'response', 'error']);
+const emit = defineEmits<{
+  'update:data': [data: Record<string, any>];
+  'response': [response: any];
+  'error': [error: string | null];
+  'loading': [loading: boolean];
+}>();
+
 const requestData = ref<Record<string, any>>({});
 const loading = ref(false);
 
@@ -49,6 +55,7 @@ defineExpose({
   submitRequest: async () => {
     try {
       loading.value = true;
+      emit('loading', true);
       emit('error', null);
       emit('response', null);
 
@@ -85,6 +92,7 @@ defineExpose({
       }
     } finally {
       loading.value = false;
+      emit('loading', false);
     }
   }
 });
