@@ -98,8 +98,8 @@
               <UAlert
                 title="Valid OpenAPI specification"
                 description="You can proceed with the import."
-                color="green"
-                variant="solid"
+                color="success"
+                variant="soft"
                 icon="i-heroicons-check-circle"
               />
             </div>
@@ -107,19 +107,19 @@
             <div v-if="validationStatus === 'invalid'" class="mt-4">
               <UAlert
                 :title="validationError"
-                color="red"
-                variant="solid"
+                color="error"
+                variant="soft"
                 icon="i-heroicons-x-circle"
               >
                 <template #description>
                   <div class="flex items-center justify-between">
                     <span>Download our sample OpenAPI specification to see the required structure.</span>
                     <UButton
-                      color="white"
+                      color="neutral"
                       variant="ghost"
                       icon="i-heroicons-arrow-down-tray"
-                      :ui="{ rounded: 'rounded-full' }"
-                      @click="() => window.open('/sample-openapi.json', '_blank')"
+                      class="rounded-full"
+                      @click="openSampleOpenApi"
                     />
                   </div>
                 </template>
@@ -144,10 +144,13 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { usePocketBase } from '~/lib/pocketbase'; 
 
 const emit = defineEmits<{
   'refresh': []
 }>()
+
+const pb = usePocketBase()
 
 const showFileUpload = ref(false)
 const uploadedFile = ref<File | null>(null)
@@ -156,6 +159,28 @@ const validationError = ref('')
 const validationStatus = ref<'idle' | 'valid' | 'invalid'>('idle')
 const isValidFile = computed(() => uploadedFile.value !== null && validationStatus.value === 'valid')
 const isSubmitting = ref(false)
+
+interface OpenAPISpec {
+  info: {
+    title: string
+    description?: string
+    version: string
+  }
+  servers?: { url: string }[]
+  paths: Record<string, Record<string, {
+    summary?: string
+    description?: string
+    parameters?: {
+      name: string
+      in: string
+      description?: string
+      required?: boolean
+      schema?: {
+        type: string
+      }
+    }[]
+  }>>
+}
 
 const resetState = () => {
   showFileUpload.value = false
@@ -198,6 +223,12 @@ const handleFileUpload = async (event: Event) => {
   if (!input.files?.length) return
 
   const file = input.files[0]
+  if (!file) {
+    validationError.value = 'No file selected'
+    validationStatus.value = 'invalid'
+    return
+  }
+
   uploadedFile.value = file
 
   try {
@@ -211,35 +242,108 @@ const handleFileUpload = async (event: Event) => {
   }
 }
 
+const openSampleOpenApi = () => {
+  window.open('/sample-openapi.json', '_blank')
+}
+
+const mapOpenAPITypeToPocketBase = (openAPIType: string): string => {
+  // Map OpenAPI types to PocketBase supported types
+  switch (openAPIType) {
+    case 'integer':
+    case 'number':
+      return 'number'
+    case 'boolean':
+      return 'boolean'
+    case 'array':
+      return 'array'
+    case 'object':
+      return 'object'
+    default:
+      return 'string'
+  }
+}
+
+const createApiFromOpenAPI = async (jsonData: OpenAPISpec) => {
+  try {
+    // Create API record
+    const apiData = {
+      name: jsonData.info.title,
+      description: jsonData.info.description || jsonData.info.title,
+      baseUrl: jsonData.servers?.[0]?.url || '',
+      isActive: true,
+      type: 'FREE',
+      createdBy: pb.authStore.model?.id,
+      rateLimit: '100' // Default rate limit
+    }
+
+    const apiRecord = await pb.collection('apis').create(apiData)
+
+    // Create endpoints and parameters
+    for (const [path, methods] of Object.entries(jsonData.paths)) {
+      for (const [method, details] of Object.entries(methods)) {
+        // Create endpoint
+        const endpointData = {
+          name: details.summary || `${method.toUpperCase()} ${path}`,
+          description: details.description || '',
+          path: path,
+          method: method.toUpperCase(),
+          api: apiRecord.id
+        }
+
+        const endpointRecord = await pb.collection('endpoints').create(endpointData)
+
+        // Create parameters if any
+        if (details.parameters) {
+          for (const param of details.parameters) {
+            const parameterData = {
+              name: param.name,
+              description: param.description || '',
+              type: mapOpenAPITypeToPocketBase(param.schema?.type || 'string'),
+              param_in: param.in,
+              required: param.required || false,
+              endpoint: endpointRecord.id
+            }
+
+            await pb.collection('parameters').create(parameterData)
+          }
+        }
+      }
+    }
+
+    return true
+  } catch (error) {
+    console.error('Error creating API:', error)
+    throw error
+  }
+}
+
 const submitImport = async () => {
   if (!isValidFile.value || isSubmitting.value) return
   
   isSubmitting.value = true
-  const formData = new FormData()
-  formData.append('file', uploadedFile.value as File)
 
   try {
-    // TODO: Replace with your API endpoint
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    const jsonData = JSON.parse(fileContent.value) as OpenAPISpec
+    await createApiFromOpenAPI(jsonData)
     
     useToast().add({
       title: 'Success',
       description: 'Successfully imported API',
-      color: 'green'
+      color: 'success'
     })
 
     emit('refresh')
     resetState()
     
   } catch (error) {
-    const message = 'Failed to import API'
+    const message = error instanceof Error ? error.message : 'Failed to import API'
     validationError.value = message
     validationStatus.value = 'invalid'
     
     useToast().add({
       title: 'Error',
       description: message,
-      color: 'red'
+      color: 'error'
     })
   } finally {
     isSubmitting.value = false
