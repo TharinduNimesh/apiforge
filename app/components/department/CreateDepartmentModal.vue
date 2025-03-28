@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import type { ApiOption } from '~/types/api';
-import type { TableColumn } from '#ui/types';
+import { ref, computed, onMounted } from "vue";
+import type { ApiOption } from "~/types/api";
+import type { TableColumn } from "#ui/types";
+import { usePocketBase } from "~/lib/pocketbase";
 
 interface ApiAssignment {
   apiId: string;
@@ -10,7 +11,7 @@ interface ApiAssignment {
 
 interface AssignedApi extends ApiAssignment {
   name: string;
-  type: 'FREE' | 'PAID';
+  type: "FREE" | "PAID";
   endpoint?: string;
   description?: string;
 }
@@ -26,63 +27,106 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'submit', form: DepartmentForm): void;
-  (e: 'close'): void;
+  (e: "submit", form: DepartmentForm): void;
+  (e: "close"): void;
 }>();
 
 const form = ref<DepartmentForm>({
-  name: '',
-  description: '',
-  apiAssignments: []
+  name: "",
+  description: "",
+  apiAssignments: [],
 });
 
 // For the new API selection
-const selectedApiId = ref<string>('');
+const selectedApiId = ref<string>("");
 const rateLimit = ref<number>(100);
 
+const apis = ref<ApiOption[]>([]);
+const loading = ref(true);
+const pb = usePocketBase();
+const isLoading = ref(false);
+
+// Add fetch function that runs only on client side
+const fetchApis = async () => {
+  try {
+    loading.value = true;
+    const records = await pb.collection("api_details").getFullList({
+      sort: "-createdAt",
+    });
+
+    // Transform records to match ApiOption interface
+    apis.value = records.map((record) => ({
+      id: record.id,
+      name: record.name as string,
+      description: record.description as string,
+      type: record.type as "FREE" | "PAID",
+      status: record.status ? "ACTIVE" : "INACTIVE",
+      endpoint: record.endpoint as string,
+      rateLimit: record.rateLimit as number,
+    }));
+  } catch (error: any) {
+    console.error("Error fetching APIs:", error);
+    useToast().add({
+      title: "Error",
+      description: "Failed to load APIs. Please try again later.",
+      color: "error",
+    });
+    apis.value = []; // Reset APIs on error
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Only fetch APIs on client side to avoid hydration mismatches
+onMounted(() => {
+  fetchApis();
+});
+
 const availableApis = computed(() => {
-  return props.apis.filter(api => 
-    !form.value.apiAssignments.some(assignment => assignment.apiId === api.id) &&
-    api.status === 'ACTIVE'
+  return apis.value.filter(
+    (api) =>
+      !form.value.apiAssignments.some(
+        (assignment) => assignment.apiId === api.id
+      ) && api.status === "ACTIVE"
   );
 });
 
 const selectedApiDetails = computed(() => {
-  return props.apis.find(api => api.id === selectedApiId.value);
+  return apis.value.find((api) => api.id === selectedApiId.value);
 });
 
 const assignedApis = computed<AssignedApi[]>(() => {
-  return form.value.apiAssignments.map(assignment => {
-    const apiDetails = props.apis.find(api => api.id === assignment.apiId);
+  return form.value.apiAssignments.map((assignment) => {
+    const apiDetails = apis.value.find((api) => api.id === assignment.apiId);
     return {
       ...assignment,
-      name: apiDetails?.name || 'Unknown API',
-      type: apiDetails?.type || 'FREE',
-      endpoint: apiDetails?.endpoint || '',
-      description: apiDetails?.description || ''
+      name: apiDetails?.name || "Unknown API",
+      type: apiDetails?.type || "FREE",
+      endpoint: apiDetails?.endpoint || "",
+      description: apiDetails?.description || "",
     };
   });
 });
 
 const resetForm = () => {
   form.value = {
-    name: '',
-    description: '',
-    apiAssignments: []
+    name: "",
+    description: "",
+    apiAssignments: [],
   };
-  selectedApiId.value = '';
+  selectedApiId.value = "";
   rateLimit.value = 100;
 };
 
 const addApiAssignment = () => {
   if (!selectedApiDetails.value) return;
-  
+
   form.value.apiAssignments.push({
     apiId: selectedApiDetails.value.id,
-    rateLimit: rateLimit.value
+    rateLimit: rateLimit.value,
   });
-  
-  selectedApiId.value = '';
+
+  selectedApiId.value = "";
   rateLimit.value = 100;
 };
 
@@ -92,24 +136,70 @@ const removeApiAssignment = (index: number) => {
 
 const handleClose = () => {
   resetForm();
-  emit('close');
+  emit("close");
 };
 
-const handleSubmit = () => {
-  emit('submit', form.value);
-  resetForm();
-  emit('close');
+const handleSubmit = async () => {
+  if (isLoading.value) return;
+
+  try {
+    isLoading.value = true;
+
+    // Create department first
+    const departmentData = {
+      name: form.value.name,
+      description: form.value.description,
+      is_active: true,
+    };
+
+    const department = await pb
+      .collection("departments")
+      .create(departmentData);
+
+    // Create API assignments for the department one by one to avoid cancellation
+    for (const assignment of form.value.apiAssignments) {
+      const assignmentData = {
+        department_id: department.id,
+        api_id: assignment.apiId,
+        rate_limit: assignment.rateLimit,
+      };
+      await pb.collection("department_apis").create(assignmentData);
+    }
+
+    useToast().add({
+      title: "Success",
+      description: "Department created successfully",
+      color: "success",
+    });
+
+    emit("submit", form.value);
+    resetForm();
+    emit("close");
+  } catch (error: any) {
+    console.error("Error creating department:", error);
+    useToast().add({
+      title: "Error",
+      description: error?.message || "Failed to create department",
+      color: "error",
+    });
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 const isSubmitDisabled = computed(() => {
-  return form.value.name.trim() === '' || form.value.apiAssignments.length === 0;
+  return (
+    form.value.name.trim() === "" ||
+    form.value.apiAssignments.length === 0 ||
+    isLoading.value
+  );
 });
 
-const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
-  const color = type === 'PAID' ? 'warning' : 'success';
+const getApiTypeBadge = (type: "FREE" | "PAID") => {
+  const color = type === "PAID" ? "warning" : "success";
   return {
-    label: type === 'PAID' ? 'Premium' : 'Free',
-    color: color as 'warning' | 'success'
+    label: type === "PAID" ? "Premium" : "Free",
+    color: color as "warning" | "success",
   };
 };
 </script>
@@ -168,10 +258,15 @@ const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
             <!-- API Selection Form -->
             <div class="space-y-4">
               <UFormField label="Select API">
+                <div v-if="loading" class="w-full">
+                  <USkeleton class="h-10 w-full" />
+                </div>
                 <USelectMenu
-                  v-model="(selectedApiId as unknown as ApiOption)"
+                  v-else
+                  v-model="selectedApiId"
                   :items="availableApis"
-                  value-attribute="id"
+                  value-key="id"
+                  label-key="name"
                   placeholder="Choose an API to assign"
                   class="w-full"
                 >
@@ -185,7 +280,9 @@ const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
                       />
                       <div class="flex-1 min-w-0">
                         <div class="font-medium">{{ item.name }}</div>
-                        <div class="text-xs text-gray-500 truncate">{{ item.description }}</div>
+                        <div class="text-xs text-gray-500 truncate">
+                          {{ item.description }}
+                        </div>
                       </div>
                     </div>
                   </template>
@@ -226,14 +323,29 @@ const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
                 icon="i-heroicons-information-circle"
               />
 
-              <div v-if="assignedApis.length === 0" class="text-center py-8 border border-dashed rounded-lg">
-                <UIcon name="i-heroicons-link-slash" class="mx-auto mb-2 h-8 w-8 text-gray-400" />
+              <div
+                v-if="assignedApis.length === 0"
+                class="text-center py-8 border border-gray-100 border-dashed rounded-lg"
+              >
+                <UIcon
+                  name="i-heroicons-link-slash"
+                  class="mx-auto mb-2 h-8 w-8 text-gray-400"
+                />
                 <div class="text-gray-500">No APIs assigned yet</div>
-                <div class="text-sm text-gray-400">Select an API and specify rate limit to assign it</div>
+                <div class="text-sm text-gray-400">
+                  Select an API and specify rate limit to assign it
+                </div>
               </div>
 
-              <div v-else class="border rounded-lg divide-y">
-                <div v-for="(api, index) in assignedApis" :key="api.apiId" class="p-4">
+              <div
+                v-else
+                class="border border-gray-100 rounded-lg divide-y divide-gray-100"
+              >
+                <div
+                  v-for="(api, index) in assignedApis"
+                  :key="api.apiId"
+                  class="p-4"
+                >
                   <div class="flex items-center justify-between gap-4">
                     <div class="flex items-center gap-2 min-w-0">
                       <UBadge
@@ -244,17 +356,15 @@ const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
                       />
                       <div class="min-w-0">
                         <div class="font-medium truncate">{{ api.name }}</div>
-                        <div class="text-sm text-gray-500 truncate">{{ api.description }}</div>
+                        <div class="text-sm text-gray-500 truncate">
+                          {{ api.description }}
+                        </div>
                       </div>
                     </div>
 
                     <div class="flex items-center gap-4">
                       <div class="w-32">
-                        <UInput
-                          v-model="api.rateLimit"
-                          type="number"
-                          :min="1"
-                        >
+                        <UInput v-model="api.rateLimit">
                           <template #trailing>/hour</template>
                         </UInput>
                       </div>
@@ -274,7 +384,7 @@ const getApiTypeBadge = (type: 'FREE' | 'PAID') => {
           </div>
 
           <!-- Footer Actions -->
-          <div class="flex justify-end gap-3 pt-4 border-t">
+          <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <UButton
               color="neutral"
               variant="ghost"

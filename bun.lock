@@ -14,6 +14,7 @@
         "zod": "^3.24.2",
       },
       "devDependencies": {
+        "@iconify-json/heroicons": "^1.2.2",
         "@types/node": "^22.13.12",
         "prisma": "^6.5.0",
         "tsx": "^4.19.3",
@@ -148,6 +149,8 @@
     "@floating-ui/utils": ["@floating-ui/utils@0.2.9", "", {}, "sha512-MDWhGtE+eHw5JW7lq4qhc5yRLS11ERl1c7Z6Xd0a58DozHES6EnNNwUWbMiG4J9Cgj053Bhk8zvlhFYKVhULwg=="],
 
     "@floating-ui/vue": ["@floating-ui/vue@1.1.6", "", { "dependencies": { "@floating-ui/dom": "^1.0.0", "@floating-ui/utils": "^0.2.9", "vue-demi": ">=0.13.0" } }, "sha512-XFlUzGHGv12zbgHNk5FN2mUB7ROul3oG2ENdTpWdE+qMFxyNxWSRmsoyhiEnpmabNm6WnUvR1OvJfUfN4ojC1A=="],
+
+    "@iconify-json/heroicons": ["@iconify-json/heroicons@1.2.2", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-qoW4pXr5kTTL6juEjgTs83OJIwpePu7q1tdtKVEdj+i0zyyVHgg/dd9grsXJQnpTpBt6/VwNjrXBvFjRsKPENg=="],
 
     "@iconify/collections": ["@iconify/collections@1.0.530", "", { "dependencies": { "@iconify/types": "*" } }, "sha512-jAgl0ptlcZIRRi+GdadEv8KlIrvc2wNV1L7pj/K09xmJDsEEX1okpF2KfNObJXc1Vdfh3mV429RVa7I3v1EcSw=="],
 

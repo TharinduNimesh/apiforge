@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Department } from '~/types/department';
 import type { Api } from '~/types/api';
-import { ref } from 'vue';
+import { ref, watchEffect, onMounted } from 'vue';
+import { usePocketBase } from '~/lib/pocketbase';
 
 interface Props {
   department: Department;
@@ -14,10 +15,51 @@ const emit = defineEmits<{
   (e: 'update:apiAssignments', assignments: Department['apiAssignments']): void;
 }>();
 
+const pb = usePocketBase();
+const toast = useToast();
+
 // Modal States
 const selectedApi = ref<Api | undefined>(undefined);
 const newRateLimit = ref<number>(100);
-const toast = useToast();
+
+// Track original rate limits and assignments
+const originalRateLimits = ref<Record<string, number>>({});
+const departmentApiRecords = ref<Record<string, string>>({});  // Store API assignment record IDs
+const currentRateLimits = ref<Record<string, number>>({});  // Track current rate limits
+
+// Update tracking when assignments change
+watchEffect(() => {
+  props.department.apiAssignments.forEach(assignment => {
+    if (!(assignment.apiId in originalRateLimits.value)) {
+      originalRateLimits.value[assignment.apiId] = assignment.rateLimit;
+      currentRateLimits.value[assignment.apiId] = assignment.rateLimit;
+    }
+  });
+});
+
+// Track API assignment record IDs
+const fetchApiAssignmentRecords = async () => {
+  try {
+    const records = await pb.collection('department_apis').getList(1, 50, {
+      filter: `department_id = "${props.department.id}"`
+    });
+    
+    records.items.forEach(record => {
+      departmentApiRecords.value[record.api_id] = record.id;
+    });
+  } catch (error) {
+    console.error('Error fetching API assignment records:', error);
+  }
+};
+
+onMounted(() => {
+  fetchApiAssignmentRecords();
+});
+
+const isRateLimitChanged = (apiId: string, currentLimit: number) => {
+  currentRateLimits.value[apiId] = currentLimit;
+  return originalRateLimits.value[apiId] !== currentRateLimits.value[apiId];
+};
 
 const getApiDetails = (apiId: string) => {
   return props.apis.find(api => api.id === apiId);
@@ -83,9 +125,17 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
   if (!props.department.isActive) return;
 
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
+    const recordId = departmentApiRecords.value[apiId];
+    if (!recordId) {
+      throw new Error('API assignment record not found');
+    }
+
+    // Update rate limit in PocketBase
+    await pb.collection('department_apis').update(recordId, {
+      rate_limit: newLimit
+    });
     
+    // Update local state
     const newAssignments = props.department.apiAssignments.map(assignment =>
       assignment.apiId === apiId 
         ? { ...assignment, rateLimit: newLimit }
@@ -93,6 +143,7 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
     );
     
     emit('update:apiAssignments', newAssignments);
+    originalRateLimits.value[apiId] = newLimit; // Update the original value after successful update
     
     toast.add({
       title: 'Success',
@@ -100,6 +151,7 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
       color: 'success',
     });
   } catch (error: any) {
+    console.error('Error updating rate limit:', error);
     toast.add({
       title: 'Error',
       description: error.message || 'Failed to update rate limit',
@@ -196,6 +248,7 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
       title="Department Inactive"
       description="This department is currently inactive. Editing is disabled."
       class="mb-4"
+      variant="subtle"
     />
 
     <div v-if="department.apiAssignments.length === 0" class="text-center py-8">
@@ -209,7 +262,7 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
       </p>
     </div>
 
-    <div v-else class="divide-y">
+    <div v-else class="divide-y divide-gray-100">
       <div
         v-for="assignment in department.apiAssignments"
         :key="assignment.apiId"
@@ -233,13 +286,27 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
           </div>
 
           <div class="flex items-center gap-4">
-            <UInput
-              v-model="assignment.rateLimit"
-              @change="handleRateLimitUpdate(assignment.apiId, assignment.rateLimit)"
-              :disabled="!department.isActive"
-            >
-              <template #trailing>/hour</template>
-            </UInput>
+            <div class="flex items-center gap-2">
+              <UInput
+                :model-value="currentRateLimits[assignment.apiId] ?? assignment.rateLimit"
+                @update:model-value="(value) => {
+                  currentRateLimits[assignment.apiId] = Number(value);
+                  isRateLimitChanged(assignment.apiId, Number(value));
+                }"
+                :disabled="!department.isActive"
+              >
+                <template #trailing>/hour</template>
+              </UInput>
+
+              <UButton
+                v-if="isRateLimitChanged(assignment.apiId, currentRateLimits[assignment.apiId] ?? assignment.rateLimit)"
+                color="success"
+                variant="ghost"
+                icon="i-heroicons-check"
+                @click="handleRateLimitUpdate(assignment.apiId, currentRateLimits[assignment.apiId] || assignment.rateLimit)"
+                :disabled="!department.isActive"
+              />
+            </div>
 
             <UButton
               color="error"

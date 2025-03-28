@@ -3,7 +3,6 @@ import { usePocketBase } from '../../utils/pocketbase'
 export default defineEventHandler(async (event) => {
   try {
     const id = event.context.params?.id
-    console.log('🔵 [API Call] Starting request for endpoint ID:', id)
     
     if (!id) {
       throw createError({
@@ -26,28 +25,13 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    console.log('🔵 [API Call] Found endpoint:', {
-      name: endpoint.name,
-      method: endpoint.method,
-      path: endpoint.path,
-      apiId: endpoint.api,
-      baseUrl: endpoint.expand?.api?.baseUrl
-    })
-
     // Get all parameters for this endpoint
     const parameters = await pb.collection('parameters').getFullList({
       filter: `endpoint = "${id}"`
     })
-    console.log('🔵 [API Call] Found parameters:', parameters.map(p => ({
-      name: p.name,
-      type: p.type,
-      param_in: p.param_in,
-      required: p.required
-    })))
 
     // Get the request body
     const body = await readBody(event)
-    console.log('🔵 [API Call] Received request body:', body)
 
     // Build the URL with path parameters
     const baseUrl = endpoint.expand?.api?.baseUrl || ''
@@ -81,8 +65,6 @@ export default defineEventHandler(async (event) => {
     // Handle case where path is just '/' by using base URL directly
     const url = new URL(cleanPath === '' ? cleanBaseUrl : `${cleanBaseUrl}/${cleanPath}`)
     
-    console.log('🔵 [API Call] Constructed base URL:', url.toString())
-
     // Handle other parameter types
     let isFormData = false
     parameters.forEach(param => {
@@ -99,18 +81,17 @@ export default defineEventHandler(async (event) => {
         switch (param.param_in) {
           case 'query':
             queryParams.append(param.name, paramValue)
-            console.log('🔵 [API Call] Added query parameter:', param.name, paramValue)
             break
           case 'header':
             headers.append(param.name, paramValue)
-            console.log('🔵 [API Call] Added header:', param.name, paramValue)
             break
           case 'body':
             if (!requestBody || isFormData) {
-              requestBody = {}
+              requestBody = {} as Record<string, any>
             }
-            requestBody[param.name] = paramValue
-            console.log('🔵 [API Call] Added body parameter:', param.name, paramValue)
+            if (requestBody && !isFormData) {
+              (requestBody as Record<string, any>)[param.name] = paramValue
+            }
             break
           case 'formdata':
             if (!requestBody || !(requestBody instanceof FormData)) {
@@ -121,11 +102,9 @@ export default defineEventHandler(async (event) => {
               const file = paramValue
               if (file) {
                 (requestBody as FormData).append(param.name, file)
-                console.log('🔵 [API Call] Added file parameter:', param.name)
               }
             } else {
               (requestBody as FormData).append(param.name, paramValue)
-              console.log('🔵 [API Call] Added form parameter:', param.name, paramValue)
             }
             break
         }
@@ -134,19 +113,12 @@ export default defineEventHandler(async (event) => {
 
     // Add query parameters to URL
     url.search = queryParams.toString()
-    console.log('🔵 [API Call] Final URL with query parameters:', url.toString())
-    console.log('🔵 [API Call] Request configuration:', {
-      method: endpoint.method,
-      headers: Object.fromEntries(headers.entries()),
-      bodyType: isFormData ? 'FormData' : (requestBody ? 'JSON' : 'none'),
-      hasBody: !!requestBody
-    })
 
     // Make the external API call
     const response = await fetch(url, {
       method: endpoint.method,
       headers,
-      body: isFormData ? requestBody : 
+      body: isFormData ? requestBody as FormData :
             requestBody ? JSON.stringify(requestBody) : undefined
     })
 
@@ -157,7 +129,6 @@ export default defineEventHandler(async (event) => {
     if (contentType?.includes('application/json')) {
       // Try to parse as JSON
       responseData = await response.json().catch((err) => {
-        console.log('🔴 [API Call] Error parsing response as JSON:', err)
         return null
       })
     } else {
@@ -168,12 +139,6 @@ export default defineEventHandler(async (event) => {
         contentType: contentType || 'text/plain'
       }
     }
-    
-    console.log('🔵 [API Call] Received response:', {
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      data: responseData
-    })
 
     // Return the response with the same status code
     return {
@@ -184,11 +149,6 @@ export default defineEventHandler(async (event) => {
 
   } catch (error: any) {
     // Handle errors
-    console.error('🔴 [API Call] Error:', {
-      message: error.message,
-      statusCode: error.statusCode,
-      stack: error.stack
-    })
     
     if (error.statusCode) {
       throw error

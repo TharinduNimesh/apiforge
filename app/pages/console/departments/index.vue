@@ -4,22 +4,43 @@ definePageMeta({
 });
 
 import { ref, computed } from 'vue';
-import type { Department } from '~/types/department';
+import type { DepartmentView } from '~/types/department';
 import type { TableColumn, DropdownMenuItem } from '@nuxt/ui';
-import { mockDepartments } from '~/data/mockDepartments';
-import { mockApis } from '~/data/mockApis';
+import type { Api } from '~/types/api';
 import CreateDepartmentModal from '~/components/department/CreateDepartmentModal.vue';
+import { usePocketBase } from '~/lib/pocketbase';
 
-const departments = ref<Department[]>(mockDepartments);
-const apis = ref(mockApis);
+const departments = ref<DepartmentView[]>([]);
+const apis = ref<Api[]>([]);
 const loading = ref(true);
 const toast = useToast();
+const pb = usePocketBase();
 
 const fetchDepartments = async () => {
   try {
     loading.value = true;
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    departments.value = mockDepartments;
+    const records = await pb.collection('department_details').getList(
+      pagination.value.page,
+      pagination.value.rows,
+      {
+        filter: filters.value.status !== 'ALL' 
+          ? `is_active = ${filters.value.status === 'active'}`
+          : '',
+        sort: '-created'
+      }
+    );
+    
+    departments.value = records.items.map(item => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      is_active: item.is_active,
+      created: item.created,
+      updated: item.updated,
+      user_count: item.user_count,
+      api_count: item.api_count
+    }));
+    pagination.value.total = records.totalItems;
   } catch (error) {
     console.error('Error fetching departments:', error);
     toast.add({
@@ -33,8 +54,29 @@ const fetchDepartments = async () => {
   }
 };
 
+const fetchApis = async () => {
+  try {
+    const records = await pb.collection('apis').getFullList();
+    apis.value = records.map(record => ({
+      id: record.id,
+      name: record.name,
+      description: record.description,
+      type: record.type,
+      status: record.status,
+      createdAt: record.created,
+      updatedAt: record.updated,
+      rateLimit: 0, // Default value
+      endpointCount: 0 // Default value
+    })) as Api[];
+  } catch (error) {
+    console.error('Error fetching APIs:', error);
+    apis.value = [];
+  }
+};
+
 onMounted(() => {
   fetchDepartments();
+  fetchApis();
 });
 
 const filters = ref<{
@@ -56,55 +98,61 @@ const pagination = ref<{
 });
 
 const filteredDepartments = computed(() => {
-  const filtered = departments.value.filter((dept) => {
+  return departments.value.filter((dept) => {
     const searchTerm = filters.value.search.toLowerCase();
-    const matchesSearch = !searchTerm || 
+    return !searchTerm || 
       dept.name.toLowerCase().includes(searchTerm) || 
       dept.description.toLowerCase().includes(searchTerm);
-    
-    const deptStatus = dept.isActive ? 'active' : 'inactive';
-    const matchesStatus = filters.value.status === "ALL" || deptStatus === filters.value.status;
-    
-    return matchesSearch && matchesStatus;
   });
-
-  pagination.value.total = filtered.length;
-
-  const start = pagination.value.page - 1;
-  const end = start + pagination.value.rows;
-
-  return filtered.slice(start * pagination.value.rows, end * pagination.value.rows);
 });
 
-const toggleDepartmentStatus = (department: Department) => {
-  const dept = departments.value.find(d => d.id === department.id);
-  if (dept) {
-    dept.isActive = !dept.isActive;
+const toggleDepartmentStatus = async (department: DepartmentView) => {
+  try {
+    await pb.collection('departments').update(department.id, {
+      is_active: !department.is_active
+    });
+    
+    const deptIndex = departments.value.findIndex(d => d.id === department.id);
+    if (deptIndex !== -1) {
+      departments.value[deptIndex] = {
+        ...departments.value[deptIndex],
+        is_active: !department.is_active
+      } as DepartmentView;
+    }
     
     toast.add({
       title: 'Success',
-      description: `Department ${dept.isActive ? 'activated' : 'deactivated'} successfully`,
+      description: `Department ${!department.is_active ? 'activated' : 'deactivated'} successfully`,
       color: 'success',
       icon: 'i-heroicons-check-circle'
+    });
+    
+    fetchDepartments(); // Refresh the list
+  } catch (error) {
+    console.error('Error toggling department status:', error);
+    toast.add({
+      title: 'Error',
+      description: 'Failed to update department status',
+      color: 'error',
     });
   }
 };
 
-const columns: TableColumn<Department>[] = [
+const columns: TableColumn<DepartmentView>[] = [
   {
     accessorKey: 'name',
     header: 'Department'
   },
   {
-    accessorKey: 'userAssignments',
+    accessorKey: 'user_count',
     header: 'Active Users'
   },
   {
-    accessorKey: 'apiAssignments',
+    accessorKey: 'api_count',
     header: 'Active APIs'
   },
   {
-    accessorKey: 'createdAt',
+    accessorKey: 'created',
     header: 'Created At'
   },
   {
@@ -112,7 +160,7 @@ const columns: TableColumn<Department>[] = [
   }
 ];
 
-function getDropdownActions(department: Department): DropdownMenuItem[][] {
+function getDropdownActions(department: DepartmentView): DropdownMenuItem[][] {
   return [
     [
       {
@@ -122,7 +170,7 @@ function getDropdownActions(department: Department): DropdownMenuItem[][] {
       }
     ],
     [
-      department.isActive ? {
+      department.is_active ? {
         label: 'Deactivate Department',
         icon: 'i-heroicons-power-20-solid',
         color: 'error',
@@ -140,35 +188,48 @@ function getDropdownActions(department: Department): DropdownMenuItem[][] {
 const hasDepartments = computed(() => departments.value.length > 0);
 const hasFilteredResults = computed(() => filteredDepartments.value.length > 0);
 
-const createDepartment = () => {
-  // TODO: Implement department creation
-  console.log('Create department clicked');
-};
-
-const handleDepartmentCreate = (form: any) => {
-  const newDepartment: Department = {
-    id: crypto.randomUUID(),
-    name: form.name,
-    description: form.description,
-    isActive: true,
-    apiAssignments: form.apiAssignments,
-    userAssignments: [],
-    createdAt: new Date().toISOString(),
-    createdBy: '1' // Mock user ID
-  };
-
-  departments.value.unshift(newDepartment);
-  
-  toast.add({
-    title: 'Success',
-    description: 'Department created successfully',
-    color: 'success',
-    icon: 'i-heroicons-check-circle'
-  });
+const handleDepartmentCreate = async (form: any) => {
+  try {
+    const data = {
+      name: form.name,
+      description: form.description,
+      is_active: true
+    };
+    
+    const record = await pb.collection('departments').create(data);
+    
+    // Create department-api assignments if any
+    if (form.apiAssignments?.length) {
+      for (const apiId of form.apiAssignments) {
+        await pb.collection('department_apis').create({
+          department_id: record.id,
+          api_id: apiId,
+          rate_limit: 1000 // Default rate limit
+        });
+      }
+    }
+    
+    toast.add({
+      title: 'Success',
+      description: 'Department created successfully',
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    });
+    
+    fetchDepartments(); // Refresh the list
+  } catch (error) {
+    console.error('Error creating department:', error);
+    toast.add({
+      title: 'Error',
+      description: 'Failed to create department',
+      color: 'error'
+    });
+  }
 };
 
 const onPageChange = (newPage: number) => {
   pagination.value.page = newPage;
+  fetchDepartments();
 };
 
 const emptyMessage = computed(() => {
@@ -289,9 +350,9 @@ const emptyMessage = computed(() => {
                   <div class="flex items-center gap-2">
                     <span class="font-medium">{{ row.original.name }}</span>
                     <UBadge
-                      :color="row.original.isActive ? 'success' : 'error'"
+                      :color="row.original.is_active ? 'success' : 'error'"
                       variant="subtle"
-                      :label="row.original.isActive ? 'Active' : 'Inactive'"
+                      :label="row.original.is_active ? 'Active' : 'Inactive'"
                     />
                   </div>
                   <div class="text-sm text-gray-500">
@@ -304,7 +365,7 @@ const emptyMessage = computed(() => {
                 <UBadge
                   color="info"
                   variant="subtle"
-                  :label="row.original.userAssignments.length.toString()"
+                  :label="row.original.user_count.toString()"
                 />
               </template>
 
@@ -312,12 +373,12 @@ const emptyMessage = computed(() => {
                 <UBadge
                   color="success"
                   variant="subtle"
-                  :label="row.original.apiAssignments.length.toString()"
+                  :label="row.original.api_count.toString()"
                 />
               </template>
 
               <template #createdAt-cell="{ row }">
-                {{ new Date(row.getValue('createdAt')).toLocaleDateString() }}
+                {{ new Date(row.getValue('created')).toLocaleDateString() }}
               </template>
 
               <template #actions-cell="{ row }">

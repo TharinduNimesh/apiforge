@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Department } from '~/types/department';
 import type { User } from '~/types/user';
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 interface Props {
   department: Department;
@@ -15,16 +15,17 @@ const emit = defineEmits<{
 }>();
 
 // Modal States
-const selectedUser = ref<User | undefined>(undefined);
+const selectedUserId = ref<string>('');
 const toast = useToast();
+
+const selectedUser = computed(() => 
+  props.availableUsers.find(user => user.id === selectedUserId.value)
+);
 
 const handleUserAssign = async () => {
   if (!selectedUser.value || !props.department.isActive) return;
 
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
     const newAssignments = [...props.department.userAssignments, selectedUser.value.id];
     emit('update:userAssignments', newAssignments);
     
@@ -35,7 +36,7 @@ const handleUserAssign = async () => {
     });
     
     // Reset form state
-    selectedUser.value = undefined;
+    selectedUserId.value = '';
   } catch (error: any) {
     toast.add({
       title: 'Error',
@@ -101,12 +102,11 @@ const handleUserRemove = async (userId: string) => {
             <div class="space-y-4">
               <UFormField label="Select User">
                 <USelectMenu
-                  v-model="selectedUser"
+                  v-model="selectedUserId"
                   :items="availableUsers"
-                  option-attribute="name"
-                  value-attribute="id"
+                  label-key="name"
+                  value-key="id"
                   placeholder="Choose a user"
-                  :selected-value="selectedUser?.id"
                   class="w-full"
                 >
                   <template #item="{ item }">
@@ -148,6 +148,7 @@ const handleUserRemove = async (userId: string) => {
       title="Department Inactive"
       description="This department is currently inactive. Editing is disabled."
       class="mb-4"
+      variant="subtle"
     />
 
     <div v-if="department.userAssignments.length === 0" class="text-center py-8">
