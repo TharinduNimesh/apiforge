@@ -125,16 +125,19 @@ const handleSendRequest = async () => {
                 <EndpointDrawerHeader :endpoint="endpoint" :loading="loading" @send="handleSendRequest" />
 
                 <!-- Main Content -->
-                <div class="flex-1 overflow-hidden border-y border-gray-100">
+                <div class="flex-1 min-h-0 border-y border-gray-100">
                     <UTabs
                         v-model="currentTab"
                         :items="[
                             { label: 'Request', slot: 'request', value: 'request' },
                             { label: 'Response', slot: 'response', value: 'response' }
                         ]"
+                        class="h-full flex flex-col"
                         :ui="{
-                            list: 'bg-gray-100 px-2 py-2 w-full h-auto',                            
-                            trigger: 'px-4 py-2 font-medium text-sm'
+                            list: 'bg-gray-100 px-2 py-2 w-full h-auto flex-none',
+                            root: 'flex-1 min-h-0',
+                           
+                            content: 'h-full'
                         }"
                     >
                         <template #request>

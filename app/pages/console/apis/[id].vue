@@ -77,7 +77,7 @@ const fetchEndpoints = async () => {
           description: param.description,
           type: param.type,
           required: param.required,
-          in: param.param_in
+          param_in: param.param_in
         })),
         responses: []
       };
@@ -305,7 +305,7 @@ const handleCancelDelete = () => {
                       :to="`/console/apis/${api.id}/edit`"
                       icon="i-heroicons-pencil"
                       color="primary"
-                      variant="ghost"
+                      variant="subtle"
                       class="flex-1 sm:flex-none"
                     >
                       Edit
@@ -316,7 +316,7 @@ const handleCancelDelete = () => {
                       <UButton
                         icon="i-heroicons-archive-box"
                         :color="api.status === 'ACTIVE' ? 'warning' : 'success'"
-                        variant="ghost"
+                        variant="subtle"
                         class="flex-1 sm:flex-none"
                         @click="handleShowArchiveModal"
                       >
@@ -383,7 +383,7 @@ const handleCancelDelete = () => {
                         v-if="api.status !== 'ACTIVE'"
                         icon="i-heroicons-trash"
                         color="error"
-                        variant="ghost"
+                        variant="subtle"
                         class="flex-1 sm:flex-none"
                         @click="handleShowDeleteModal"
                       >

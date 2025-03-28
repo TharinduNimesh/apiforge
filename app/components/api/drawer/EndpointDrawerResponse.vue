@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed } from "vue";
+import ShikiHighlight from "~/components/ShikiHighlight.vue";
 
 const props = defineProps<{
   response: any;
@@ -9,43 +10,55 @@ const props = defineProps<{
 
 const isExpanded = ref(false);
 const copySuccess = ref(false);
+const maxHeight = ref(300);
 
 const responseData = computed(() => {
   if (!props.response) return null;
   return props.response.data || null;
 });
 
+const formattedResponse = computed(() => {
+  if (!responseData.value) return "";
+  return JSON.stringify(responseData.value, null, 2);
+});
+
+const toggleExpand = () => {
+  isExpanded.value = !isExpanded.value;
+};
+
 const copyToClipboard = async () => {
   if (props.response) {
-    await navigator.clipboard.writeText(JSON.stringify(responseData.value, null, 2));
+    await navigator.clipboard.writeText(formattedResponse.value);
     copySuccess.value = true;
-    setTimeout(() => copySuccess.value = false, 2000);
+    setTimeout(() => (copySuccess.value = false), 2000);
   }
 };
 
 // Status tag properties
 const statusTag = computed(() => {
-  if (!props.response?.statusCode) return { label: 'Unknown', color: 'neutral' };
-  
+  if (!props.response?.statusCode)
+    return { label: "Unknown", color: "neutral" };
+
   const status = props.response.statusCode;
   if (status >= 200 && status < 300) {
-    return { label: 'Success', color: 'success' };
+    return { label: "Success", color: "success" };
   } else if (status >= 400 && status < 500) {
-    return { label: 'Client Error', color: 'warning' };
+    return { label: "Client Error", color: "warning" };
   } else if (status >= 500) {
-    return { label: 'Server Error', color: 'error' };
+    return { label: "Server Error", color: "error" };
   }
-  return { label: 'Unknown', color: 'neutral' };
+  return { label: "Unknown", color: "neutral" };
 });
 
 // Error handling
 const errorDetails = computed(() => {
   if (!props.error && !props.response) return null;
+  if (!props.error && props.response?.statusCode >= 200 && props.response?.statusCode < 300) return null;
 
-  const status = props.response?.status;
-  let type = 'error';
+  const status = props.response?.statusCode;
+  let type = 'Error';
   let message = props.error;
-  let color = 'error';
+  let color: 'warning' | 'error' = 'error';
 
   if (status) {
     if (status === 429) {
@@ -71,13 +84,13 @@ const errorDetails = computed(() => {
     }
   }
 
-  return { type, message, color };
+  return message ? { type, message, color } : null;
 });
 </script>
 
 <template>
-  <div class="h-full overflow-auto">
-    <div class="p-6 space-y-6">
+  <div class="h-full flex flex-col">
+    <div class="flex-1 min-h-0 p-6 space-y-6 overflow-y-auto">
       <!-- Loading State -->
       <div v-if="loading" class="text-center py-12">
         <UIcon name="i-heroicons-arrow-path" class="w-12 h-12 text-gray-300 mb-4 animate-spin" />
@@ -125,33 +138,58 @@ const errorDetails = computed(() => {
           </div>
 
           <!-- Response Body -->
-          <UCard>
+          <div class="relative bg-gray-50 rounded-lg overflow-hidden">
             <div
-              :class="{ 'max-h-[300px] overflow-hidden': !isExpanded }"
               class="relative"
+              :style="{
+                maxHeight: isExpanded ? 'none' : '300px',
+                overflow: isExpanded ? 'visible' : 'hidden'
+              }"
             >
-              <pre><code class="text-sm text-gray-700 font-mono whitespace-pre-wrap">{{ JSON.stringify(responseData, null, 2) }}</code></pre>
+              <div class="overflow-auto">
+                <ClientOnly>
+                  <ShikiHighlight
+                    lang="json"
+                    class="text-sm font-mono"
+                    :code="formattedResponse"
+                  />
+                </ClientOnly>
+              </div>
               
               <!-- Fade Overlay -->
               <div
-                v-if="!isExpanded && !loading"
-                class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-gray-50 to-transparent"
+                v-if="!isExpanded && formattedResponse.length > 500"
+                class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none"
               />
             </div>
 
             <!-- Expand Button -->
-            <div v-if="!loading" class="absolute bottom-4 left-0 right-0 flex justify-center">
+            <div
+              v-if="formattedResponse.length > 500"
+              class="flex justify-center py-4 bg-gray-50 border-t border-gray-100"
+            >
               <UButton
                 :label="isExpanded ? 'Show Less' : 'Show More'"
                 :icon="isExpanded ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'"
-                color="neutral"
-                variant="ghost"
-                @click="isExpanded = !isExpanded"
+                color="primary"
+                variant="soft"
+                @click="toggleExpand"
               />
             </div>
-          </UCard>
+          </div>
         </div>
       </template>
     </div>
   </div>
 </template>
+
+<style>
+.shiki-highlight {
+  background-color: rgb(249 250 251 / 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.shiki {
+  background: transparent !important;
+}
+</style>

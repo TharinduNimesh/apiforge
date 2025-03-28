@@ -1,8 +1,5 @@
 <script setup lang="ts">
 import type { ApiEndpoint } from '~/types/api';
-import { ref, computed } from 'vue';
-import EndpointModal from './EndpointModal.vue';
-import { mockEndpoints } from '~/data/mockEndpoints';
 import EndpointDrawer from './drawer/EndpointDrawer.vue';
 import { usePocketBase } from '~/lib/pocketbase';
 
@@ -25,7 +22,6 @@ const emit = defineEmits<{
 }>();
 
 const selectedEndpoint = ref<ApiEndpoint | null>(null);
-const showEndpointModal = ref(false);
 const loading = ref(false);
 
 // Add new ref for tracking expanded rows
@@ -47,84 +43,6 @@ const getMethodColor = (method: string): NuxtUIColor => {
     case 'DELETE': return 'error';
     case 'PATCH': return 'warning';
     default: return 'neutral';
-  }
-};
-
-const handleAddEndpoint = () => {
-  selectedEndpoint.value = null;
-  showEndpointModal.value = true;
-};
-
-const handleEditEndpoint = (endpoint: ApiEndpoint) => {
-  selectedEndpoint.value = { ...endpoint };
-  showEndpointModal.value = true;
-};
-
-const handleSaveEndpoint = async (endpoint: ApiEndpoint) => {
-  try {
-    loading.value = true;
-    
-    // Create or update endpoint
-    let endpointRecord;
-    const endpointData = {
-      name: endpoint.name,
-      description: endpoint.description,
-      path: endpoint.path,
-      method: endpoint.method,
-      api: props.apiId
-    };
-
-    if (endpoint.id) {
-      // Update existing endpoint
-      endpointRecord = await pb.collection('endpoints').update(endpoint.id, endpointData);
-    } else {
-      // Create new endpoint
-      endpointRecord = await pb.collection('endpoints').create(endpointData);
-    }
-
-    // Handle parameters
-    if (endpoint.parameters?.length) {
-      // Delete existing parameters if updating
-      if (endpoint.id) {
-        const existingParams = await pb.collection('parameters').getFullList({
-          filter: `endpoint = "${endpoint.id}"`
-        });
-        
-        for (const param of existingParams) {
-          await pb.collection('parameters').delete(param.id);
-        }
-      }
-
-      // Create new parameters
-      for (const param of endpoint.parameters) {
-        await pb.collection('parameters').create({
-          name: param.name,
-          description: param.description,
-          type: param.type,
-          param_in: param.in,
-          required: param.required,
-          endpoint: endpointRecord.id
-        });
-      }
-    }
-    
-    // Refresh the endpoints list
-    emit('refresh');
-    
-    useToast().add({
-      title: 'Success',
-      description: 'Endpoint saved successfully',
-      color: 'success'
-    });
-  } catch (error) {
-    console.error('Error saving endpoint:', error);
-    useToast().add({
-      title: 'Error',
-      description: 'Failed to save endpoint',
-      color: 'error'
-    });
-  } finally {
-    loading.value = false;
   }
 };
 
@@ -391,14 +309,6 @@ const endpointItems = computed<EndpointAccordionItem[]>(() => {
       </table>
     </div>
   </UCard>
-
-  <!-- Add/Edit Endpoint Modal -->
-  <EndpointModal
-    v-if="selectedEndpoint"
-    :endpoint="selectedEndpoint"
-    v-model:open="showEndpointModal"
-    @save="handleSaveEndpoint"
-  />
 </template>
 
 <style scoped>
