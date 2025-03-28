@@ -10,30 +10,77 @@ definePageMeta({
 
 const route = useRoute();
 const api = ref<Api | undefined>();
+const endpoints = ref<ApiEndpoint[]>([]);
 const selectedTab = ref('overview');
 const loading = ref(false);
 const pb = usePocketBase();
 
+interface ServerEndpoint {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  method: string;
+  parameters: ServerParameter[];
+}
+
+interface ServerParameter {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  required: boolean;
+  param_in: string;
+}
+
 const fetchApi = async () => {
   try {
     loading.value = true;
-    const record = await pb.collection('api_details').getOne(route.params.id as string);
-    
-    if (!record) {
-      throw new Error('API not found');
+    const response = await fetch(`/api/${route.params.id}`, {
+      headers: {
+        'Authorization': `Bearer ${pb.authStore.token}`
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('API not found');
+      }
+      throw new Error('Failed to fetch API details');
     }
 
-    // Transform the record to match our Api type
+    const data = await response.json();
+    
+    // Transform the data to match our Api type
     api.value = {
-      id: record.id,
-      name: record.name,
-      description: record.description,
-      type: record.type,
-      status: record.status ? 'ACTIVE' : 'INACTIVE',
-      rateLimit: record.rateLimit,
-      endpointCount: record.endpointCount,
-      createdAt: record.createdAt
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      type: data.type,
+      status: data.isActive ? 'ACTIVE' : 'INACTIVE',
+      rateLimit: data.rateLimit,
+      endpointCount: data.endpoints?.length || 0,
+      createdAt: data.created // Assuming the server sends this
     };
+
+    // Update endpoints with proper type annotations
+    endpoints.value = data.endpoints.map((endpoint: ServerEndpoint) => ({
+      id: endpoint.id,
+      name: endpoint.name,
+      description: endpoint.description,
+      path: endpoint.path,
+      method: endpoint.method,
+      parameters: endpoint.parameters.map((param: ServerParameter) => ({
+        id: param.id,
+        name: param.name,
+        description: param.description,
+        type: param.type,
+        required: param.required,
+        param_in: param.param_in
+      })),
+      responses: []
+    }));
+
   } catch (error) {
     console.error('Error fetching API:', error);
     showError({ statusCode: 404, message: 'API not found' });
@@ -42,82 +89,17 @@ const fetchApi = async () => {
   }
 };
 
-const endpoints = ref<ApiEndpoint[]>([]);
-
-const fetchEndpoints = async () => {
-  try {
-    if (!api.value?.id) return;
-    
-    // Create an AbortController for the main request
-    const controller = new AbortController();
-    
-    // Get endpoints first
-    const endpointRecords = await pb.collection('endpoints').getFullList({
-      filter: `api = "${api.value.id}"`,
-      requestKey: `endpoints-${api.value.id}` // Add unique request key
-    });
-
-    // Then fetch parameters for each endpoint
-    const endpointPromises = endpointRecords.map(async (record) => {
-      // Fetch parameters for this endpoint with a unique request key
-      const parameters = await pb.collection('parameters').getFullList({
-        filter: `endpoint = "${record.id}"`,
-        requestKey: `parameters-${record.id}` // Add unique request key
-      });
-      
-      return {
-        id: record.id,
-        name: record.name,
-        description: record.description,
-        path: record.path,
-        method: record.method,
-        parameters: parameters.map(param => ({
-          id: param.id,
-          name: param.name,
-          description: param.description,
-          type: param.type,
-          required: param.required,
-          param_in: param.param_in
-        })),
-        responses: []
-      };
-    });
-
-    // Wait for all parameter requests to complete
-    endpoints.value = await Promise.all(endpointPromises);
-
-  } catch (error: any) {
-    // Only show error if it's not an auto-cancellation
-    if (!error.isAbort) {
-      console.error('Error fetching endpoints:', error);
-      useToast().add({
-        title: 'Error',
-        description: 'Failed to load endpoints',
-        color: 'error'
-      });
-    }
-  }
-};
-
-// Cleanup function to cancel any pending requests
-const cleanup = () => {
-  if (api.value?.id) {
-    pb.cancelRequest(`endpoints-${api.value.id}`);
-    endpoints.value.forEach(endpoint => {
-      pb.cancelRequest(`parameters-${endpoint.id}`);
-    });
-  }
+// Remove the separate fetchEndpoints function since we get everything in one call
+const refreshEndpoints = async () => {
+  await fetchApi();
 };
 
 // Setup lifecycle hooks
 onMounted(async () => {
   await fetchApi();
-  await fetchEndpoints();
 });
 
-onBeforeUnmount(() => {
-  cleanup();
-});
+// Remove the cleanup function since we're not using PocketBase requests anymore
 
 const formattedDate = computed(() => {
   if (!api.value?.createdAt) return '';
@@ -148,10 +130,17 @@ const tabs = [
 const handleArchive = async () => {
   try {
     loading.value = true;
-    // Update the API record to set isActive to false
-    await pb.collection('apis').update(api.value?.id as string, {
-      isActive: false
+    const response = await fetch(`/api/${api.value?.id}/archive`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${pb.authStore.token}`
+      }
     });
+
+    if (!response.ok) {
+      throw new Error('Failed to archive API');
+    }
+
     if (api.value) api.value.status = 'INACTIVE';
     useToast().add({
       title: 'Success',
@@ -174,10 +163,17 @@ const handleArchive = async () => {
 const handleUnarchive = async () => {
   try {
     loading.value = true;
-    // Update the API record to set isActive to true
-    await pb.collection('apis').update(api.value?.id as string, {
-      isActive: true
+    const response = await fetch(`/api/${api.value?.id}/restore`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${pb.authStore.token}`
+      }
     });
+
+    if (!response.ok) {
+      throw new Error('Failed to restore API');
+    }
+
     if (api.value) api.value.status = 'ACTIVE';
     useToast().add({
       title: 'Success',
@@ -200,8 +196,17 @@ const handleUnarchive = async () => {
 const handleDelete = async () => {
   try {
     loading.value = true;
-    // Completely delete the API record
-    await pb.collection('apis').delete(api.value?.id as string);
+    const response = await fetch(`/api/${api.value?.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${pb.authStore.token}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to delete API');
+    }
+
     // Navigate back to the console after successful deletion
     navigateTo('/console');
     useToast().add({
@@ -219,11 +224,6 @@ const handleDelete = async () => {
   } finally {
     loading.value = false;
   }
-};
-
-const refreshEndpoints = async () => {
-  cleanup(); // Cancel any pending requests before refreshing
-  await fetchEndpoints();
 };
 
 const showArchiveModal = ref(false);

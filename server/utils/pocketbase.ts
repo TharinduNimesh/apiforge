@@ -1,18 +1,30 @@
 import PocketBase from 'pocketbase'
 import { useRuntimeConfig } from '#imports'
 
-let pb: PocketBase
+let adminPb: PocketBase
+let userPb: PocketBase
 
-export function usePocketBase() {
-    if (!pb) {
+export function getAdminPocketBase() {
+    if (!adminPb) {
         const config = useRuntimeConfig()
-        pb = new PocketBase('https://pocketbase.eversoft.lk')
+        adminPb = new PocketBase('https://pocketbase.eversoft.lk')
         
         // Authenticate with super admin token
         if (config.PB_SUPER_ADMIN_KEY) {
-            pb.authStore.save(config.PB_SUPER_ADMIN_KEY, null)
+            adminPb.authStore.save(config.PB_SUPER_ADMIN_KEY, null)
         }
     }
+    return adminPb
+}
 
-    return pb
+export async function getUserPocketBase(token?: string) {
+    // Create new instance for each user request to avoid token mixing
+    userPb = new PocketBase('https://pocketbase.eversoft.lk')
+    
+    if (token) {
+        userPb.authStore.save(token, null);
+        await userPb.collection("users").authRefresh();
+    }
+    
+    return userPb
 }

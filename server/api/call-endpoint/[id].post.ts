@@ -1,4 +1,4 @@
-import { usePocketBase } from '../../utils/pocketbase'
+import { getAdminPocketBase } from '../../utils/pocketbase'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    const pb = usePocketBase()
+    const pb = getAdminPocketBase()
 
     // Get the endpoint details
     const endpoint = await pb.collection('endpoints').getOne(id, {

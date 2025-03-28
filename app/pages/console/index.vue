@@ -17,20 +17,37 @@ const pb = usePocketBase();
 const fetchApis = async () => {
   try {
     loading.value = true;
-    const records = await pb.collection('api_details').getFullList({
-      sort: '-createdAt'
+    const response = await fetch('/api/', {
+      headers: {
+        'Authorization': `Bearer ${pb.authStore.token}`
+      }
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const records = await response.json();
 
     // Transform records to match ApiType interface
-    apis.value = records.map(record => ({
+    apis.value = records.map((record: {
+      id: string;
+      name: string;
+      description: string;
+      type: 'FREE' | 'PAID';
+      isActive: boolean;
+      rateLimit: number;
+      endpointCount: number;
+      createdAt: string;
+    }) => ({
       id: record.id,
-      name: record.name as string,
-      description: record.description as string,
-      type: record.type as 'FREE' | 'PAID',
-      status: record.status ? 'ACTIVE' : 'INACTIVE',
-      rateLimit: record.rateLimit as number,
-      endpointCount: record.endpointCount as number,
-      createdAt: record.createdAt as string
+      name: record.name,
+      description: record.description,
+      type: record.type,
+      status: record.isActive ? 'ACTIVE' : 'INACTIVE',
+      rateLimit: record.rateLimit,
+      endpointCount: record.endpointCount,
+      createdAt: record.createdAt
     }));
   } catch (error: any) {
     console.error('Error fetching APIs:', error);

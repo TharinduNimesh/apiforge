@@ -99,10 +99,15 @@ const pagination = ref<{
 
 const filteredDepartments = computed(() => {
   return departments.value.filter((dept) => {
-    const searchTerm = filters.value.search.toLowerCase();
-    return !searchTerm || 
-      dept.name.toLowerCase().includes(searchTerm) || 
-      dept.description.toLowerCase().includes(searchTerm);
+    const matchesSearch = !filters.value.search || 
+      dept.name.toLowerCase().includes(filters.value.search.toLowerCase()) || 
+      dept.description.toLowerCase().includes(filters.value.search.toLowerCase());
+      
+    const matchesStatus = filters.value.status === 'ALL' || 
+      (filters.value.status === 'active' && dept.is_active) ||
+      (filters.value.status === 'inactive' && !dept.is_active);
+      
+    return matchesSearch && matchesStatus;
   });
 });
 
