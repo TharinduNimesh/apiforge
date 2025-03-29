@@ -1,22 +1,39 @@
 <script setup lang="ts">
-const form = reactive({
+import * as z from 'zod'
+import type { FormSubmitEvent } from '@nuxt/ui'
+import { pb } from '~/lib/pocketbase';
+
+const schema = z.object({
+    email: z.string().email('Invalid email address'),
+});
+
+type Schema = z.output<typeof schema>
+
+const state = reactive<Partial<Schema>>({
     email: '',
 });
 
-const schema = {
-    email: {
-        type: 'string',
-        required: true,
-        email: true
+const loading = ref(false);
+const toast = useToast()
+
+async function submit(event: FormSubmitEvent<Schema>) {
+    loading.value = true;
+    try {
+        await pb.collection('users').requestPasswordReset(event.data.email);
+        toast.add({
+            title: 'Success',
+            description: 'We have emailed your password reset link.',
+            color: 'success'
+        });
+    } catch (error: any) {
+        toast.add({
+            title: 'Error',
+            description: error.message || 'Failed to send password reset link. Please try again.',
+            color: 'error'
+        });
+    } finally {
+        loading.value = false;
     }
-};
-
-const state = ref(form);
-const status = ref<string | null>(null);
-
-async function submit(event: any) {
-    // TODO: Implement password reset logic
-    status.value = 'We have emailed your password reset link.';
 }
 </script>
 
@@ -31,13 +48,6 @@ async function submit(event: any) {
             </p>
         </div>
 
-        <UAlert
-            v-if="status"
-            type="success"
-            :title="status"
-            class="mb-6"
-        />
-
         <UForm
             :schema="schema"
             :state="state"
@@ -49,6 +59,7 @@ async function submit(event: any) {
                 name="email"
             >
                 <UInput
+                    v-model="state.email"
                     type="email"
                     placeholder="Enter your email"
                     icon="i-heroicons-envelope"
@@ -59,6 +70,8 @@ async function submit(event: any) {
             <UButton
                 type="submit"
                 block
+                :loading="loading"
+                color="primary"
                 class="mt-4"
             >
                 Email Password Reset Link

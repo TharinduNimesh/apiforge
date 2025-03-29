@@ -24,12 +24,20 @@ interface DepartmentForm {
 
 const props = defineProps<{
   apis: ApiOption[];
+  modelValue: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "submit", form: DepartmentForm): void;
   (e: "close"): void;
+  (e: "update:modelValue", value: boolean): void;
 }>();
+
+// Add computed property for two-way binding
+const isOpen = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value)
+});
 
 const form = ref<DepartmentForm>({
   name: "",
@@ -136,7 +144,7 @@ const removeApiAssignment = (index: number) => {
 
 const handleClose = () => {
   resetForm();
-  emit("close");
+  emit('update:modelValue', false);
 };
 
 const handleSubmit = async () => {
@@ -172,7 +180,6 @@ const handleSubmit = async () => {
       color: "success",
     });
 
-    emit("submit", form.value);
     resetForm();
     emit("close");
   } catch (error: any) {
@@ -205,7 +212,11 @@ const getApiTypeBadge = (type: "FREE" | "PAID") => {
 </script>
 
 <template>
-  <UModal :ui="{ content: 'min-w-[600px]' }">
+  <UModal 
+    :ui="{ content: 'min-w-[600px]' }"
+    v-model:open="isOpen"
+    @close="emit('update:modelValue', false)"
+  >
     <UButton
       icon="i-heroicons-plus"
       label="Create Department"
@@ -227,7 +238,7 @@ const getApiTypeBadge = (type: "FREE" | "PAID") => {
           </div>
         </template>
 
-        <form @submit.prevent="handleSubmit" class="space-y-6">
+        <UForm :state="form" @submit.prevent="handleSubmit" class="space-y-6">
           <!-- Department Name -->
           <UFormField label="Department Name" required>
             <UInput
@@ -398,7 +409,7 @@ const getApiTypeBadge = (type: "FREE" | "PAID") => {
               :disabled="isSubmitDisabled"
             />
           </div>
-        </form>
+        </UForm>
       </UCard>
     </template>
   </UModal>

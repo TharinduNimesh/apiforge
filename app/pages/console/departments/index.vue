@@ -13,6 +13,7 @@ import { usePocketBase } from '~/lib/pocketbase';
 const departments = ref<DepartmentView[]>([]);
 const apis = ref<Api[]>([]);
 const loading = ref(true);
+const isModalOpen = ref(false);  // Add this line for modal state
 const toast = useToast();
 const pb = usePocketBase();
 
@@ -193,43 +194,8 @@ function getDropdownActions(department: DepartmentView): DropdownMenuItem[][] {
 const hasDepartments = computed(() => departments.value.length > 0);
 const hasFilteredResults = computed(() => filteredDepartments.value.length > 0);
 
-const handleDepartmentCreate = async (form: any) => {
-  try {
-    const data = {
-      name: form.name,
-      description: form.description,
-      is_active: true
-    };
-    
-    const record = await pb.collection('departments').create(data);
-    
-    // Create department-api assignments if any
-    if (form.apiAssignments?.length) {
-      for (const apiId of form.apiAssignments) {
-        await pb.collection('department_apis').create({
-          department_id: record.id,
-          api_id: apiId,
-          rate_limit: 1000 // Default rate limit
-        });
-      }
-    }
-    
-    toast.add({
-      title: 'Success',
-      description: 'Department created successfully',
-      color: 'success',
-      icon: 'i-heroicons-check-circle'
-    });
-    
-    fetchDepartments(); // Refresh the list
-  } catch (error) {
-    console.error('Error creating department:', error);
-    toast.add({
-      title: 'Error',
-      description: 'Failed to create department',
-      color: 'error'
-    });
-  }
+const handleDepartmentSubmitted = () => {
+  fetchDepartments(); // Refresh the list after successful creation
 };
 
 const onPageChange = (newPage: number) => {
@@ -258,7 +224,11 @@ const emptyMessage = computed(() => {
         <h2 class="text-2xl font-semibold leading-tight text-gray-800">
           Departments Management
         </h2>
-        <CreateDepartmentModal :apis="apis" @submit="handleDepartmentCreate" />
+        <CreateDepartmentModal 
+          v-model="isModalOpen"
+          :apis="apis" 
+          @submit="handleDepartmentSubmitted" 
+        />
       </div>
 
       <!-- Filter Bar -->
@@ -298,7 +268,11 @@ const emptyMessage = computed(() => {
                 Start by creating your first department.
               </p>
             </div>
-            <CreateDepartmentModal :apis="apis" @submit="handleDepartmentCreate" />
+            <CreateDepartmentModal 
+              v-model="isModalOpen"
+              :apis="apis" 
+              @submit="handleDepartmentSubmitted" 
+            />
           </div>
         </div>
 

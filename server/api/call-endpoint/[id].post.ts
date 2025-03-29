@@ -22,27 +22,64 @@ export default defineEventHandler(async (event) => {
 
     const token = authHeader.replace('Bearer ', '')
     const adminPb = getAdminPocketBase()
-    const userPb = await getUserPocketBase(token)
+    let userId: string
+    let isAdmin = false
 
-    try {
-      if (!userPb.authStore.isValid) {
-        throw new Error('Invalid token')
+    // Check if the token is an API key (starts with apf_)
+    if (token.startsWith('apf_')) {
+      // Validate API key
+      try {
+        const apiKeys = await adminPb.collection('api_keys').getFullList({
+          filter: `key = "${token}" && expires > "${new Date().toISOString()}"`
+        })
+
+        if (apiKeys.length === 0) {
+          throw createError({
+            statusCode: 401,
+            message: 'Invalid or expired API key'
+          })
+        }
+
+        const apiKey = apiKeys[0]
+        userId = apiKey.user_id
+
+        // Update last_used timestamp
+        await adminPb.collection('api_keys').update(apiKey.id, {
+          last_used: new Date().toISOString()
+        })
+
+        // Get user record to check if admin
+        const user = await adminPb.collection('users').getOne(userId)
+        isAdmin = user.role === 'admin'
+      } catch (error) {
+        throw createError({
+          statusCode: 401,
+          message: 'Invalid API key'
+        })
       }
-    } catch (error) {
-      throw createError({
-        statusCode: 401,
-        message: 'Invalid token'
-      })
-    }
+    } else {
+      // Regular JWT token authentication
+      const userPb = await getUserPocketBase(token)
+      try {
+        if (!userPb.authStore.isValid) {
+          throw new Error('Invalid token')
+        }
+      } catch (error) {
+        throw createError({
+          statusCode: 401,
+          message: 'Invalid token'
+        })
+      }
 
-    const userId = userPb.authStore.record?.id
-    const isAdmin = userPb.authStore.record?.role === 'admin'
-
-    if (!userId) {
-      throw createError({
-        statusCode: 401,
-        message: 'User ID not found'
-      })
+      const possibleUserId = userPb.authStore.record?.id
+      if (!possibleUserId) {
+        throw createError({
+          statusCode: 401,
+          message: 'User ID not found'
+        })
+      }
+      userId = possibleUserId
+      isAdmin = userPb.authStore.record?.role === 'admin'
     }
 
     // Get the endpoint details

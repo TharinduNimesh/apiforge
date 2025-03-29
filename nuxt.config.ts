@@ -24,7 +24,7 @@ export default defineNuxtConfig({
     "/console/departments": { appMiddleware: ["admin"] },
     "/console/departments/*/**": { appMiddleware: ["admin"] },
 
-    "/console/apis/create": { appMiddleware: ["admin"] },
+    "/console/apis/*/**": { appMiddleware: ["admin"] },
   },
 
   runtimeConfig: {
