@@ -7,7 +7,6 @@ const router = useRouter();
 
 const isScrolled = ref(false);
 const isMobileMenuOpen = ref(false);
-const menuRef = ref();
 
 // Create a named function for the event listener
 const handleScroll = () => {
@@ -32,12 +31,19 @@ const navigationItems = computed(() => [
     },
 ]);
 
-// Desktop dropdown menu items - updated for UDropdownMenu format
+// Replace mock user with actual auth store user
+const user = computed(() => ({
+    name: pb.authStore.record?.name || 'Unknown User',
+    email: pb.authStore.record?.email || '',
+    role: pb.authStore.record?.role || 'user'
+}));
+
+// Update dropdown items to use computed user
 const dropdownItems = computed(() => [
     {
-        label: user.name,
+        label: user.value.name,
         avatar: {
-            text: getUserInitials(user.name)
+            text: getUserInitials(user.value.name)
         },
         disabled: true
     },
@@ -118,13 +124,6 @@ onUnmounted(() => {
     window.removeEventListener("scroll", handleScroll);
     document.body.style.overflow = '';
 });
-
-// Mock auth user for now - replace with your auth system
-const user = {
-    name: "John Doe",
-    email: "john@example.com",
-    role: "admin"
-};
 </script>
 
 <template>

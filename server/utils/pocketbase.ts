@@ -23,6 +23,7 @@ export async function getUserPocketBase(token?: string) {
     
     if (token) {
         userPb.authStore.save(token, null);
+        console.log(userPb.authStore.isValid);
         await userPb.collection("users").authRefresh();
     }
     

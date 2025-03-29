@@ -3,75 +3,310 @@ definePageMeta({
   layout: 'console'
 });
 
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import type { TableColumn } from '#ui/types';
+import type { DropdownMenuItem } from '#ui/types';
 import { usePocketBase } from '~/lib/pocketbase';
 import CreateApiKeyModal from '~/components/user/CreateApiKeyModal.vue';
 
-const user = {
-  name: 'John Doe',
-  email: 'john@example.com'
+interface ApiKey {
+  id: string;
+  collectionId: string;
+  collectionName: string;
+  created: string;
+  expires: string;
+  key: string;
+  last_used: string;
+  name: string;
+  updated: string;
+  user_id: string;
 }
 
+interface TableApiKey {
+  id: string;
+  name: string;
+  created: string;
+  last_used: string;
+  expires: string;
+  key: string;
+  isExpired: boolean;
+}
+
+const pb = usePocketBase();
+const toast = useToast();
+
+const userData = computed(() => ({
+  name: pb.authStore.record?.name || '',
+  email: pb.authStore.record?.email || '',
+}));
+
 const form = ref({
-  name: user.name,
-  email: user.email
-})
+  name: userData.value.name,
+  email: userData.value.email
+});
 
 const passwordForm = ref({
   currentPassword: '',
   newPassword: '',
   confirmPassword: ''
-})
+});
 
-const apiKeys = ref([
-  { id: 1, name: 'Development API Key', created: '2025-03-01', expires: '2025-03-31' },
-  { id: 2, name: 'Testing API Key', created: '2025-03-15', expires: '2025-04-15' }
-]);
+const apiKeys = ref<TableApiKey[]>([]);
+const loading = ref({
+  profile: false,
+  password: false,
+  apiKeys: true
+});
+const isDeleteModalOpen = ref(false);
 
-const columns = [
+const hasProfileChanges = computed(() => {
+  return form.value.name !== userData.value.name || 
+         form.value.email !== userData.value.email;
+});
+
+const handleProfileUpdate = async () => {
+  if (loading.value.profile) return;
+  if (!hasProfileChanges.value) return;
+
+  if (!pb.authStore.record) return;
+
+  try {
+    loading.value.profile = true;
+    const tasks = [];
+
+    // Update name if changed
+    if (form.value.name !== userData.value.name) {
+      tasks.push(
+        pb.collection('users').update(pb.authStore.record?.id, {
+          name: form.value.name,
+        })
+      );
+    }
+
+    // Request email change if changed
+    if (form.value.email !== userData.value.email) {
+      tasks.push(
+        pb.collection('users').requestEmailChange(form.value.email)
+      );
+    }
+
+    await Promise.all(tasks);
+
+    if (form.value.email !== userData.value.email) {
+      toast.add({
+        title: 'Email Verification Required',
+        description: 'A verification link has been sent to your new email address',
+        color: 'info',
+        icon: 'i-heroicons-envelope'
+      });
+    } else {
+      toast.add({
+        title: 'Success',
+        description: 'Profile updated successfully',
+        color: 'success',
+        icon: 'i-heroicons-check-circle'
+      });
+    }
+
+    await pb.collection("users").authRefresh();
+  } catch (error: any) {
+    console.error('Error updating profile:', error);
+    toast.add({
+      title: 'Error',
+      description: error?.message || 'Failed to update profile',
+      color: 'error'
+    });
+    // Reset form on error
+    form.value.name = userData.value.name;
+    form.value.email = userData.value.email;
+  } finally {
+    loading.value.profile = false;
+  }
+};
+
+const handlePasswordUpdate = async () => {
+  if (loading.value.password) return;
+  if (!pb.authStore.record) return;
+  
+  if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+    toast.add({
+      title: 'Error',
+      description: 'New passwords do not match',
+      color: 'error'
+    });
+    return;
+  }
+
+  try {
+    loading.value.password = true;
+    await pb.collection('users').update(pb.authStore.record?.id, {
+      oldPassword: passwordForm.value.currentPassword,
+      password: passwordForm.value.newPassword,
+      passwordConfirm: passwordForm.value.confirmPassword
+    });
+
+    toast.add({
+      title: 'Success',
+      description: 'Password updated successfully',
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    });
+
+    // Reset password form
+    passwordForm.value = {
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    };
+  } catch (error: any) {
+    console.error('Error updating password:', error);
+    toast.add({
+      title: 'Error',
+      description: error?.message || 'Failed to update password',
+      color: 'error'
+    });
+  } finally {
+    loading.value.password = false;
+  }
+};
+
+const columns: TableColumn<TableApiKey>[] = [
   {
-    id: 'name',
-    key: 'name',
-    label: 'Name'
+    accessorKey: 'name',
+    header: 'Name'
   },
   {
-    id: 'created',
-    key: 'created',
-    label: 'Created'
+    accessorKey: 'created',
+    header: 'Created',
   },
   {
-    id: 'expires',
-    key: 'expires',
-    label: 'Expires'
+    accessorKey: 'last_used',
+    header: 'Last Used'
+  },
+  {
+    accessorKey: 'expires',
+    header: 'Expires'
   },
   {
     id: 'actions',
-    key: 'actions',
-    label: ''
+    header: ''
   }
 ];
 
-const handleApiKeyCreate = async (formData: { name: string, expiresIn: string }) => {
-  // TODO: Implement API key creation
-  const toast = useToast();
-  toast.add({
-    title: 'Success',
-    description: 'API Key created successfully',
-    color: 'success',
-    icon: 'i-heroicons-check-circle'
+const formatDate = (dateString: string) => {
+  return new Date(dateString).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
   });
 };
 
-const handleApiKeyDelete = async (keyId: number) => {
-  // TODO: Implement API key deletion
-  const toast = useToast();
-  toast.add({
-    title: 'Success',
-    description: 'API Key deleted successfully',
-    color: 'success',
-    icon: 'i-heroicons-check-circle'
-  });
+const refreshApiKeys = async () => {
+  if (!pb.authStore.record?.id) return;
+
+  try {
+    loading.value.apiKeys = true;
+    const records = await pb.collection('api_keys').getFullList({
+      filter: pb.filter('user_id = {:id}', { id: pb.authStore.record.id }),
+      sort: '-created'
+    });
+    
+    apiKeys.value = records.map(record => ({
+      id: record.id,
+      name: record.name,
+      created: formatDate(record.created),
+      last_used: record.last_used ? formatDate(record.last_used) : 'Never',
+      expires: formatDate(record.expires),
+      key: record.key,
+      isExpired: new Date(record.expires) < new Date()
+    }));
+  } catch (error: any) {
+    console.error('Error fetching API keys:', error);
+    toast.add({
+      title: 'Error',
+      description: error?.message || 'Failed to load API keys',
+      color: 'error'
+    });
+  } finally {
+    loading.value.apiKeys = false;
+  }
 };
+
+const handleApiKeyCreate = async () => {
+  // Refresh the list after creation
+  await refreshApiKeys();
+};
+
+const handleApiKeyDelete = async (keyId: string) => {
+  try {
+    await pb.collection('api_keys').delete(keyId);
+    await refreshApiKeys();
+    
+    toast.add({
+      title: 'Success',
+      description: 'API Key deleted successfully',
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    });
+  } catch (error: any) {
+    console.error('Error deleting API key:', error);
+    toast.add({
+      title: 'Error',
+      description: error?.message || 'Failed to delete API key',
+      color: 'error'
+    });
+  }
+};
+
+const handleAccountDelete = async () => {
+  if (!pb.authStore.record) return;
+  
+  try {
+    await pb.collection('users').delete(pb.authStore.record?.id);
+    pb.authStore.clear();
+    await navigateTo('/auth/sign-in');
+    
+    toast.add({
+      title: 'Success',
+      description: 'Account deleted successfully',
+      color: 'success',
+      icon: 'i-heroicons-check-circle'
+    });
+  } catch (error: any) {
+    console.error('Error deleting account:', error);
+    toast.add({
+      title: 'Error',
+      description: error?.message || 'Failed to delete account',
+      color: 'error'
+    });
+  }
+};
+
+const copyApiKey = async (key: string) => {
+  try {
+    await navigator.clipboard.writeText(key);
+    toast.add({
+      title: 'Success',
+      description: 'API Key copied to clipboard',
+      color: 'success',
+      icon: 'i-heroicons-clipboard-document-check'
+    });
+  } catch (error) {
+    toast.add({
+      title: 'Error',
+      description: 'Failed to copy API key',
+      color: 'error'
+    });
+  }
+};
+
+const handleDeleteModalClose = () => {
+  isDeleteModalOpen.value = false;
+};
+
+onMounted(() => {
+  refreshApiKeys();
+});
 </script>
 
 <template>
@@ -93,17 +328,35 @@ const handleApiKeyDelete = async (keyId: number) => {
             </div>
           </template>
 
-          <UForm :state="form" class="space-y-4">
-            <UFormField label="Name" name="name">
+          <UForm :state="form" class="space-y-4" @submit="handleProfileUpdate">
+            <!-- Name Input -->
+            <UFormField label="Name">
               <UInput v-model="form.name" placeholder="Enter your name" />
             </UFormField>
             
-            <UFormField label="Email" name="email">
-              <UInput v-model="form.email" type="email" placeholder="Enter your email" />
+            <!-- Email Input -->
+            <UFormField label="Email">
+              <UInput 
+                v-model="form.email" 
+                type="email" 
+                placeholder="Enter your email"
+              />
+              <template #help>
+                <span v-if="form.email !== userData.email" class="text-sm text-gray-500">
+                  Changing your email will require verification of the new address
+                </span>
+              </template>
             </UFormField>
 
             <div class="flex justify-end">
-              <UButton color="primary" label="Save Changes" />
+              <UButton 
+                type="submit" 
+                color="primary" 
+                :loading="loading.profile"
+                :disabled="!hasProfileChanges || loading.profile"
+              >
+                {{ loading.profile ? 'Updating...' : 'Update Profile' }}
+              </UButton>
             </div>
           </UForm>
         </UCard>
@@ -121,7 +374,20 @@ const handleApiKeyDelete = async (keyId: number) => {
             </div>
           </template>
 
-          <div v-if="apiKeys.length === 0" class="text-center py-12">
+          <!-- Loading State -->
+          <div v-if="loading.apiKeys">
+            <div class="space-y-4">
+              <div v-for="n in 3" :key="n" class="flex items-center gap-4">
+                <USkeleton class="h-8 w-48" />
+                <USkeleton class="h-8 w-32" />
+                <USkeleton class="h-8 w-32" />
+                <USkeleton class="h-8 w-8" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="apiKeys.length === 0" class="text-center py-12">
             <div class="space-y-6">
               <div class="flex justify-center">
                 <UIcon name="i-heroicons-key" class="text-4xl text-gray-400" />
@@ -136,24 +402,27 @@ const handleApiKeyDelete = async (keyId: number) => {
             </div>
           </div>
 
+          <!-- API Keys Table -->
           <UTable 
             v-else
-            :rows="apiKeys"
+            :data="apiKeys"
             :columns="columns"
             hover
           >
             <template #name-cell="{ row }">
-              <div class="flex flex-col gap-1">
-                <div class="font-medium">{{ row.name }}</div>
-              </div>
-            </template>
-
-            <template #created-cell="{ row }">
-              {{ new Date(row.created).toLocaleDateString() }}
+              <div class="font-medium">{{ row.getValue('name') }}</div>
             </template>
 
             <template #expires-cell="{ row }">
-              {{ new Date(row.expires).toLocaleDateString() }}
+              <div class="flex items-center gap-2">
+                <span>{{ row.getValue('expires') }}</span>
+                <UBadge
+                  v-if="row.original.isExpired"
+                  color="error"
+                  variant="subtle"
+                  label="Expired"
+                />
+              </div>
             </template>
 
             <template #actions-cell="{ row }">
@@ -161,17 +430,10 @@ const handleApiKeyDelete = async (keyId: number) => {
                 :items="[
                   [
                     {
-                      label: 'Copy API Key',
-                      icon: 'i-heroicons-clipboard',
-                      click: () => {}
-                    }
-                  ],
-                  [
-                    {
                       label: 'Delete API Key',
                       icon: 'i-heroicons-trash',
                       color: 'error',
-                      click: () => handleApiKeyDelete(row.id)
+                      onSelect: () => handleApiKeyDelete(row.original.id)
                     }
                   ]
                 ]"
@@ -195,7 +457,7 @@ const handleApiKeyDelete = async (keyId: number) => {
             </div>
           </template>
 
-          <UForm :state="passwordForm" class="space-y-4">
+          <UForm :state="passwordForm" class="space-y-4" @submit="handlePasswordUpdate">
             <UFormField label="Current Password" name="currentPassword">
               <UInput v-model="passwordForm.currentPassword" type="password" placeholder="Enter current password" />
             </UFormField>
@@ -209,7 +471,7 @@ const handleApiKeyDelete = async (keyId: number) => {
             </UFormField>
 
             <div class="flex justify-end">
-              <UButton color="primary" label="Update Password" />
+              <UButton :loading="loading.password" type="submit" color="primary" label="Update Password" />
             </div>
           </UForm>
         </UCard>
@@ -228,20 +490,48 @@ const handleApiKeyDelete = async (keyId: number) => {
               Once you delete your account, there is no going back. Please be certain.
             </p>
 
-            <UModal>
+            <UModal v-model:open="isDeleteModalOpen">
               <UButton color="error" variant="soft" label="Delete Account" />
 
               <template #content>
-                <div class="p-4">
-                  <h3 class="text-lg font-semibold mb-4">Delete Account</h3>
-                  <p class="text-gray-600 mb-4">
-                    Are you sure you want to delete your account? This action cannot be undone.
-                  </p>
-                  <div class="flex justify-end gap-2">
-                    <UButton color="gray" variant="soft" label="Cancel" />
-                    <UButton color="error" label="Yes, Delete My Account" />
+                <UCard>
+                  <template #header>
+                    <div class="flex items-center justify-between">
+                      <h2 class="text-xl font-semibold">Delete Account</h2>
+                      <UButton
+                        color="neutral"
+                        variant="ghost"
+                        icon="i-heroicons-x-mark"
+                        class="-my-1"
+                        @click="handleDeleteModalClose"
+                      />
+                    </div>
+                  </template>
+
+                  <div class="space-y-4">
+                    <p class="text-gray-600">
+                      Are you sure you want to delete your account? This action cannot be undone and will immediately:
+                    </p>
+                    <ul class="list-disc list-inside space-y-2 text-gray-600">
+                      <li>Delete all your personal information</li>
+                      <li>Remove all your API keys</li>
+                      <li>Cancel all your API subscriptions</li>
+                    </ul>
+                    <div class="flex justify-end gap-2 pt-4 border-t">
+                      <UButton 
+                        color="neutral"
+                        variant="soft" 
+                        label="Cancel" 
+                        @click="handleDeleteModalClose"
+                      />
+                      <UButton 
+                        color="error" 
+                        label="Yes, Delete My Account" 
+                        @click="handleAccountDelete"
+                      />
+                    </div>
                   </div>
-                </div>
+                </UCard>
               </template>
             </UModal>
           </div>
