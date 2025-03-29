@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import type { ApiEndpoint } from '~/types/api';
+import type { ApiEndpoint, ApiParameter } from '~/types/api';
 import { useToast } from '#imports';
+import { usePocketBase } from '~/lib/pocketbase';
+import type { RecordModel } from 'pocketbase';
+
+// Extend ApiEndpoint type to include api property
+interface ExtendedApiEndpoint extends ApiEndpoint {
+  api?: string;
+  isNew?: boolean; // Add this to track new endpoints
+}
 
 interface Props {
-  endpoint?: ApiEndpoint;
+  endpoint?: ExtendedApiEndpoint;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -15,23 +23,50 @@ const emit = defineEmits<{
   (e: 'update:open', value: boolean): void;
 }>();
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+const httpMethods = [
+  { label: 'GET', value: 'GET' },
+  { label: 'POST', value: 'POST' },
+  { label: 'PUT', value: 'PUT' },
+  { label: 'DELETE', value: 'DELETE' },
+  { label: 'PATCH', value: 'PATCH' }
+];
+const parameterTypeOptions = [
+  { label: 'String', value: 'string' },
+  { label: 'Number', value: 'number' },
+  { label: 'Boolean', value: 'boolean' },
+  { label: 'Array', value: 'array' },
+  { label: 'Object', value: 'object' },
+  { label: 'File', value: 'file' }
+];
+const parameterLocationOptions = [
+  { label: 'Query', value: 'query' },
+  { label: 'Path', value: 'path' },
+  { label: 'Body', value: 'body' },
+  { label: 'Header', value: 'header' },
+  { label: 'Form Data', value: 'formData' }
+];
 
 // Create a function to get initial form state
-const getInitialFormState = (): ApiEndpoint => ({
+const getInitialFormState = (): ExtendedApiEndpoint => ({
   id: crypto.randomUUID(),
   name: '',
   method: 'GET',
   path: '',
   description: '',
   parameters: [],
-  responses: []
+  responses: [],
+  api: '',
+  isNew: true // Mark new endpoints
 });
 
-const state = reactive<ApiEndpoint>(props.endpoint ? { ...props.endpoint } : getInitialFormState());
+const state = reactive<ExtendedApiEndpoint>(props.endpoint ? { ...props.endpoint } : getInitialFormState());
+const selectedMethod = ref(httpMethods.find(m => m.value === state.method));
 const toast = useToast();
 const errors = reactive<Record<string, string>>({});
 const open = ref(false);
+const pb = usePocketBase();
+const confirmModalOpen = ref(false);
+const loading = ref(false);
 
 const validateForm = () => {
   errors.name = '';
@@ -81,89 +116,169 @@ const handleSave = async (event: Event) => {
     return;
   }
 
-  try {
-    const endpoint: ApiEndpoint = {
-      id: state.id,
-      name: state.name,
-      method: state.method,
-      path: state.path,
-      description: state.description || '',
-      parameters: state.parameters?.map(param => ({
-        ...param,
-        description: param.description || ''
-      })) || [],
-      responses: state.responses || []
-    };
-    
-    emit('save', endpoint);
-    emit('update:open', false); // Close modal after save
-
-    // Reset form
-    Object.assign(state, getInitialFormState());
-    errors.name = '';
-    errors.path = '';
-    
-    toast.add({
-      title: 'Success',
-      description: 'Endpoint saved successfully',
-      color: 'success'
-    });
-
-    // Close modal
-    open.value = false;
-  } catch (error) {
-    console.error('Error saving endpoint:', error);
-    toast.add({
-      title: 'Error',
-      description: 'Failed to save endpoint',
-      color: 'error'
-    });
+  // If this is an existing endpoint, show confirmation modal
+  if (props.endpoint && !props.endpoint.isNew) {
+    confirmModalOpen.value = true;
+    return;
   }
+
+  // For new endpoints, just emit the save event
+  const endpoint: ExtendedApiEndpoint = {
+    id: state.id,
+    name: state.name,
+    method: state.method,
+    path: state.path,
+    description: state.description || '',
+    parameters: state.parameters?.map(param => ({
+      ...param,
+      description: param.description || ''
+    })) || [],
+    responses: state.responses || [],
+    isNew: true
+  };
+
+  emit('save', endpoint);
+  toast.add({
+    title: 'Success',
+    description: 'Endpoint added to list',
+    color: 'success'
+  });
+
+  // Reset form and close modal
+  Object.assign(state, getInitialFormState());
+  open.value = false;
 };
-
-const handleCancel = () => {
-  emit('update:open', false);
-};
-
-const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
-const parameterTypes = ['string', 'number', 'boolean', 'object', 'array'];
-const parameterLocations = ['query', 'path', 'body', 'header'];
-
-const parameterTypeOptions = parameterTypes.map(type => ({
-  label: type.charAt(0).toUpperCase() + type.slice(1),
-  value: type,
-  icon: type === 'file' ? 'i-heroicons-document' :
-        type === 'array' ? 'i-heroicons-squares-2x2' :
-        type === 'object' ? 'i-heroicons-cube' :
-        type === 'boolean' ? 'i-heroicons-check-circle' :
-        type === 'number' ? 'i-heroicons-hashtag' :
-        'i-heroicons-document-text'
-}));
-
-const parameterLocationOptions = parameterLocations.map(location => ({
-  label: location.charAt(0).toUpperCase() + location.slice(1),
-  value: location,
-  icon: location === 'query' ? 'i-heroicons-question-mark-circle' :
-        location === 'path' ? 'i-heroicons-arrow-right' :
-        location === 'header' ? 'i-heroicons-code-bracket' :
-        'i-heroicons-document'
-}));
 
 const addParameter = () => {
   if (!state.parameters) state.parameters = [];
   state.parameters.push({
     name: '',
-    in: 'query',
     type: 'string',
-    required: true,
-    description: ''
+    param_in: 'query',
+    description: '',
+    required: false
   });
 };
 
 const removeParameter = (index: number) => {
-  if (state.parameters) {
-    state.parameters.splice(index, 1);
+  state.parameters?.splice(index, 1);
+};
+
+const handleCancel = () => {
+  open.value = false;
+  emit('update:open', false);
+};
+
+// Modified save function to properly handle types
+const handleConfirmSave = async () => {
+  loading.value = true;
+  try {
+    const endpointData: Record<string, any> = {
+      name: state.name,
+      description: state.description || '',
+      path: state.path,
+      method: state.method,
+    };
+
+    let savedEndpoint: RecordModel;
+    if (props.endpoint) {
+      savedEndpoint = await pb.collection('endpoints').update(props.endpoint.id, endpointData);
+    } else {
+      // For new endpoints, we need the api ID from the parent component
+      endpointData.api = state.api || '';
+      savedEndpoint = await pb.collection('endpoints').create(endpointData);
+    }
+
+    // Create a map of existing parameters by their name for easy lookup
+    const existingParameters = new Map();
+    if (props.endpoint) {
+      const existingParamsList = await pb.collection('parameters').getFullList({
+        filter: `endpoint = "${props.endpoint.id}"`
+      });
+      existingParamsList.forEach(param => {
+        existingParameters.set(param.name, param);
+      });
+    }
+
+    // Handle parameters
+    if (state.parameters?.length) {
+      const updatedParameterNames = new Set();
+
+      for (const param of state.parameters) {
+        const paramData = {
+          name: param.name,
+          description: param.description || '',
+          type: param.type,
+          param_in: param.param_in,
+          required: param.required,
+          endpoint: savedEndpoint.id
+        };
+
+        // Check if this parameter already exists
+        const existingParam = existingParameters.get(param.name);
+        
+        if (existingParam) {
+          // Update existing parameter
+          await pb.collection('parameters').update(existingParam.id, paramData);
+        } else {
+          // Create new parameter
+          await pb.collection('parameters').create(paramData);
+        }
+
+        updatedParameterNames.add(param.name);
+      }
+
+      // Delete parameters that were removed
+      for (const [name, param] of existingParameters) {
+        if (!updatedParameterNames.has(name)) {
+          await pb.collection('parameters').delete(param.id);
+        }
+      }
+    } else if (props.endpoint) {
+      // Delete all parameters if the endpoint exists but no parameters are specified
+      const existingParamsList = await pb.collection('parameters').getFullList({
+        filter: `endpoint = "${props.endpoint.id}"`
+      });
+      for (const param of existingParamsList) {
+        await pb.collection('parameters').delete(param.id);
+      }
+    }
+
+    // Convert the PocketBase record to ApiEndpoint type
+    const convertedEndpoint: ExtendedApiEndpoint = {
+      id: savedEndpoint.id,
+      name: savedEndpoint.name,
+      description: savedEndpoint.description,
+      path: savedEndpoint.path,
+      method: savedEndpoint.method as ApiEndpoint['method'],
+      parameters: state.parameters || [],
+      responses: state.responses || [],
+      api: savedEndpoint.api
+    };
+
+    toast.add({
+      title: 'Success',
+      description: `Endpoint ${props.endpoint ? 'updated' : 'created'} successfully`,
+      color: 'success'
+    });
+
+    emit('save', convertedEndpoint);
+    confirmModalOpen.value = false;
+    open.value = false;
+  } catch (error: any) {
+    console.error('Error saving endpoint:', error);
+    toast.add({
+      title: 'Error',
+      description: error.message || 'Failed to save endpoint',
+      color: 'error'
+    });
+  } finally {
+    loading.value = false;
   }
+};
+
+const handleCancelSave = () => {
+  confirmModalOpen.value = false;
 };
 </script>
 
@@ -206,7 +321,7 @@ const removeParameter = (index: number) => {
 
             <UFormField label="HTTP Method" name="method">
               <USelectMenu
-                v-model="state.method"
+                v-model="selectedMethod"
                 :items="httpMethods"
                 class="w-full"
               />
@@ -296,7 +411,7 @@ const removeParameter = (index: number) => {
                       :name="`parameters.${index}.in`"
                     >
                       <USelectMenu
-                        v-model="param.in"
+                        v-model="param.param_in"
                         :items="parameterLocationOptions"
                         option-value="value"
                         value-key="value"
@@ -357,6 +472,59 @@ const removeParameter = (index: number) => {
           </div>
         </UForm>
       </div>
+    </template>
+  </UModal>
+
+  <!-- Save Confirmation Modal - Only show for existing endpoints -->
+  <UModal v-if="endpoint && !endpoint.isNew" v-model:open="confirmModalOpen">
+    <template #content>
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium">Save Changes</h3>
+            <UButton
+              color="neutral"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              class="-my-1"
+              @click="handleCancelSave"
+            />
+          </div>
+        </template>
+
+        <div class="space-y-4">
+          <div class="flex items-center gap-4">
+            <div class="p-3 rounded-full bg-info-50">
+              <UIcon
+                name="i-heroicons-information-circle"
+                class="h-6 w-6 text-info-500"
+              />
+            </div>
+            <div class="space-y-1">
+              <h4 class="font-medium">{{ state.name }}</h4>
+              <p class="text-sm text-gray-500">
+                Are you sure you want to {{ props.endpoint ? 'update' : 'create' }} this endpoint? 
+                This will {{ props.endpoint ? 'modify' : 'add' }} the endpoint and its parameters.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <UButton
+              label="Cancel"
+              color="neutral"
+              variant="ghost"
+              @click="handleCancelSave"
+            />
+            <UButton
+              :label="props.endpoint ? 'Update' : 'Create'"
+              color="primary"
+              :loading="loading"
+              @click="handleConfirmSave"
+            />
+          </div>
+        </div>
+      </UCard>
     </template>
   </UModal>
 </template>

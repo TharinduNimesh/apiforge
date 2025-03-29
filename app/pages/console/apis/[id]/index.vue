@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import type { Api, ApiEndpoint } from '~/types/api';
-import { ref, computed } from 'vue';
-import EndpointModal from '~/components/api/EndpointModal.vue';
-import { usePocketBase } from '~/lib/pocketbase';
+import type { Api, ApiEndpoint } from "~/types/api";
+import { ref, computed } from "vue";
+import EndpointModal from "~/components/api/EndpointModal.vue";
+import { usePocketBase } from "~/lib/pocketbase";
 
 definePageMeta({
-  layout: 'console'
+  layout: "console",
 });
 
 const route = useRoute();
 const api = ref<Api | undefined>();
 const endpoints = ref<ApiEndpoint[]>([]);
-const selectedTab = ref('overview');
+const selectedTab = ref("overview");
 const loading = ref(false);
 const pb = usePocketBase();
 
@@ -38,29 +38,29 @@ const fetchApi = async () => {
     loading.value = true;
     const response = await fetch(`/api/${route.params.id}`, {
       headers: {
-        'Authorization': `Bearer ${pb.authStore.token}`
-      }
+        Authorization: `Bearer ${pb.authStore.token}`,
+      },
     });
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error('API not found');
+        throw new Error("API not found");
       }
-      throw new Error('Failed to fetch API details');
+      throw new Error("Failed to fetch API details");
     }
 
     const data = await response.json();
-    
+
     // Transform the data to match our Api type
     api.value = {
       id: data.id,
       name: data.name,
       description: data.description,
       type: data.type,
-      status: data.isActive ? 'ACTIVE' : 'INACTIVE',
+      status: data.isActive ? "ACTIVE" : "INACTIVE",
       rateLimit: data.rateLimit,
       endpointCount: data.endpoints?.length || 0,
-      createdAt: data.created // Assuming the server sends this
+      createdAt: data.createdAt, // Assuming the server sends this
     };
 
     // Update endpoints with proper type annotations
@@ -76,14 +76,13 @@ const fetchApi = async () => {
         description: param.description,
         type: param.type,
         required: param.required,
-        param_in: param.param_in
+        param_in: param.param_in,
       })),
-      responses: []
+      responses: [],
     }));
-
   } catch (error) {
-    console.error('Error fetching API:', error);
-    showError({ statusCode: 404, message: 'API not found' });
+    console.error("Error fetching API:", error);
+    showError({ statusCode: 404, message: "API not found" });
   } finally {
     loading.value = false;
   }
@@ -102,57 +101,58 @@ onMounted(async () => {
 // Remove the cleanup function since we're not using PocketBase requests anymore
 
 const formattedDate = computed(() => {
-  if (!api.value?.createdAt) return '';
-  return new Date(api.value.createdAt).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
+  console.log("Created At:", api.value?.createdAt);
+  if (!api.value?.createdAt) return "";
+  return new Date(api.value.createdAt).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 });
 
 const tabs = [
   {
-    label: 'Overview',
-    description: 'View API details and performance metrics.',
-    icon: 'i-heroicons-chart-bar',
-    slot: 'overview',
-    value: 'overview'
+    label: "Overview",
+    description: "View API details and performance metrics.",
+    icon: "i-heroicons-chart-bar",
+    slot: "overview",
+    value: "overview",
   },
   {
-    label: 'Endpoints',
-    description: 'Manage API endpoints and their configurations.',
-    icon: 'i-heroicons-code-bracket',
-    slot: 'endpoints',
-    value: 'endpoints'
-  }
+    label: "Endpoints",
+    description: "Manage API endpoints and their configurations.",
+    icon: "i-heroicons-code-bracket",
+    slot: "endpoints",
+    value: "endpoints",
+  },
 ];
 
 const handleArchive = async () => {
   try {
     loading.value = true;
     const response = await fetch(`/api/${api.value?.id}/archive`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${pb.authStore.token}`
-      }
+        Authorization: `Bearer ${pb.authStore.token}`,
+      },
     });
 
     if (!response.ok) {
-      throw new Error('Failed to archive API');
+      throw new Error("Failed to archive API");
     }
 
-    if (api.value) api.value.status = 'INACTIVE';
+    if (api.value) api.value.status = "INACTIVE";
     useToast().add({
-      title: 'Success',
-      description: 'API archived successfully',
-      color: 'success'
+      title: "Success",
+      description: "API archived successfully",
+      color: "success",
     });
   } catch (error) {
-    console.error('Error archiving API:', error);
+    console.error("Error archiving API:", error);
     useToast().add({
-      title: 'Error',
-      description: 'Failed to archive API',
-      color: 'error'
+      title: "Error",
+      description: "Failed to archive API",
+      color: "error",
     });
   } finally {
     loading.value = false;
@@ -164,28 +164,28 @@ const handleUnarchive = async () => {
   try {
     loading.value = true;
     const response = await fetch(`/api/${api.value?.id}/restore`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${pb.authStore.token}`
-      }
+        Authorization: `Bearer ${pb.authStore.token}`,
+      },
     });
 
     if (!response.ok) {
-      throw new Error('Failed to restore API');
+      throw new Error("Failed to restore API");
     }
 
-    if (api.value) api.value.status = 'ACTIVE';
+    if (api.value) api.value.status = "ACTIVE";
     useToast().add({
-      title: 'Success',
-      description: 'API restored successfully',
-      color: 'success'
+      title: "Success",
+      description: "API restored successfully",
+      color: "success",
     });
   } catch (error) {
-    console.error('Error restoring API:', error);
+    console.error("Error restoring API:", error);
     useToast().add({
-      title: 'Error',
-      description: 'Failed to restore API',
-      color: 'error'
+      title: "Error",
+      description: "Failed to restore API",
+      color: "error",
     });
   } finally {
     loading.value = false;
@@ -197,29 +197,29 @@ const handleDelete = async () => {
   try {
     loading.value = true;
     const response = await fetch(`/api/${api.value?.id}`, {
-      method: 'DELETE',
+      method: "DELETE",
       headers: {
-        'Authorization': `Bearer ${pb.authStore.token}`
-      }
+        Authorization: `Bearer ${pb.authStore.token}`,
+      },
     });
 
     if (!response.ok) {
-      throw new Error('Failed to delete API');
+      throw new Error("Failed to delete API");
     }
 
     // Navigate back to the console after successful deletion
-    navigateTo('/console');
+    navigateTo("/console");
     useToast().add({
-      title: 'Success',
-      description: 'API deleted successfully',
-      color: 'success'
+      title: "Success",
+      description: "API deleted successfully",
+      color: "success",
     });
   } catch (error) {
-    console.error('Error deleting API:', error);
+    console.error("Error deleting API:", error);
     useToast().add({
-      title: 'Error',
-      description: 'Failed to delete API',
-      color: 'error'
+      title: "Error",
+      description: "Failed to delete API",
+      color: "error",
     });
   } finally {
     loading.value = false;
@@ -251,9 +251,13 @@ const handleCancelDelete = () => {
     <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
       <template v-if="loading">
         <!-- API Header Skeleton -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+        <div
+          class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100"
+        >
           <div class="relative p-4 sm:p-6">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
               <!-- Left Side Skeleton -->
               <div class="flex items-center gap-4">
                 <USkeleton class="w-10 h-10 rounded-lg" />
@@ -286,7 +290,9 @@ const handleCancelDelete = () => {
           <!-- Content Skeleton -->
           <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2">
-              <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div
+                class="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+              >
                 <USkeleton class="h-6 w-32 mb-4" />
                 <div class="space-y-4">
                   <USkeleton class="h-24 w-full" />
@@ -298,7 +304,9 @@ const handleCancelDelete = () => {
               </div>
             </div>
             <div class="lg:col-span-1">
-              <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div
+                class="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+              >
                 <div class="space-y-4">
                   <USkeleton class="h-6 w-32" />
                   <USkeleton class="h-24 w-full" />
@@ -311,9 +319,13 @@ const handleCancelDelete = () => {
 
       <div v-else-if="api">
         <!-- API Header -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+        <div
+          class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100"
+        >
           <div class="relative p-4 sm:p-6">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
               <!-- Left Side -->
               <div class="flex items-center gap-4">
                 <UButton
@@ -326,27 +338,31 @@ const handleCancelDelete = () => {
                 <div class="flex flex-col gap-3 min-w-0">
                   <!-- Header Row -->
                   <div>
-                    <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 truncate">
+                    <h1
+                      class="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 truncate"
+                    >
                       {{ api.name }}
                     </h1>
                   </div>
                   <!-- Status Indicators Row -->
                   <div class="flex gap-2 items-center">
-                    <UBadge 
-                      :color="api.type === 'FREE' ? 'success' : 'warning'" 
+                    <UBadge
+                      :color="api.type === 'FREE' ? 'success' : 'warning'"
                       :label="api.type"
                       variant="subtle"
                       size="sm"
                     />
                     <div class="flex items-center gap-1.5">
-                      <span 
+                      <span
                         :class="[
                           'flex h-2.5 w-2.5 rounded-full',
-                          api.status === 'ACTIVE' ? 'bg-green-400 animate-pulse' : 'bg-red-400'
+                          api.status === 'ACTIVE'
+                            ? 'bg-green-400 animate-pulse'
+                            : 'bg-red-400',
                         ]"
                       ></span>
-                      <UBadge 
-                        :color="api.status === 'ACTIVE' ? 'success' : 'error'" 
+                      <UBadge
+                        :color="api.status === 'ACTIVE' ? 'success' : 'error'"
                         :label="api.status"
                         variant="subtle"
                         size="sm"
@@ -357,7 +373,9 @@ const handleCancelDelete = () => {
               </div>
 
               <!-- Right Side - Admin Actions -->
-              <div class="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+              <div
+                class="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto"
+              >
                 <template v-if="isAdmin()">
                   <!-- Primary Actions -->
                   <div class="flex gap-2 w-full sm:w-auto">
@@ -370,7 +388,7 @@ const handleCancelDelete = () => {
                     >
                       Edit
                     </UButton>
-                    
+
                     <!-- Archive/Unarchive Button -->
                     <UModal v-model:open="showArchiveModal">
                       <UButton
@@ -380,25 +398,41 @@ const handleCancelDelete = () => {
                         class="flex-1 sm:flex-none"
                         @click="handleShowArchiveModal"
                       >
-                        {{ api.status === 'ACTIVE' ? 'Archive' : 'Restore' }}
+                        {{ api.status === "ACTIVE" ? "Archive" : "Restore" }}
                       </UButton>
 
                       <template #content>
                         <UCard>
                           <template #header>
                             <div class="flex items-center gap-2">
-                              <UIcon 
-                                :name="api.status === 'ACTIVE' ? 'i-heroicons-archive-box' : 'i-heroicons-arrow-path'" 
-                                :class="api.status === 'ACTIVE' ? 'text-warning-500' : 'text-success-500'"
+                              <UIcon
+                                :name="
+                                  api.status === 'ACTIVE'
+                                    ? 'i-heroicons-archive-box'
+                                    : 'i-heroicons-arrow-path'
+                                "
+                                :class="
+                                  api.status === 'ACTIVE'
+                                    ? 'text-warning-500'
+                                    : 'text-success-500'
+                                "
                               />
-                              <span class="text-lg font-medium">{{ api.status === 'ACTIVE' ? 'Archive' : 'Restore' }} API</span>
+                              <span class="text-lg font-medium"
+                                >{{
+                                  api.status === "ACTIVE"
+                                    ? "Archive"
+                                    : "Restore"
+                                }}
+                                API</span
+                              >
                             </div>
                           </template>
 
                           <p class="text-gray-600">
-                            {{ api.status === 'ACTIVE' 
-                              ? 'Are you sure you want to archive this API? It will become inaccessible to users until restored.'
-                              : 'Are you sure you want to restore this API? It will become accessible to users again.'
+                            {{
+                              api.status === "ACTIVE"
+                                ? "Are you sure you want to archive this API? It will become inaccessible to users until restored."
+                                : "Are you sure you want to restore this API? It will become accessible to users again."
                             }}
                           </p>
 
@@ -413,24 +447,24 @@ const handleCancelDelete = () => {
                               >
                                 Cancel
                               </UButton>
-                                <UButton
+                              <UButton
                                 v-if="api.status === 'ACTIVE'"
                                 color="warning"
                                 icon="i-heroicons-archive-box"
                                 :loading="loading"
                                 @click="handleArchive"
-                                >
+                              >
                                 Archive
-                                </UButton>
-                                <UButton
+                              </UButton>
+                              <UButton
                                 v-if="api.status !== 'ACTIVE'"
                                 color="success"
                                 icon="i-heroicons-arrow-path"
                                 :loading="loading"
                                 @click="handleUnarchive"
-                                >
+                              >
                                 Restore
-                                </UButton>
+                              </UButton>
                             </div>
                           </template>
                         </UCard>
@@ -454,13 +488,19 @@ const handleCancelDelete = () => {
                         <UCard>
                           <template #header>
                             <div class="flex items-center gap-2">
-                              <UIcon name="i-heroicons-trash" class="text-error-500" />
-                              <span class="text-lg font-medium">Delete API</span>
+                              <UIcon
+                                name="i-heroicons-trash"
+                                class="text-error-500"
+                              />
+                              <span class="text-lg font-medium"
+                                >Delete API</span
+                              >
                             </div>
                           </template>
 
                           <p class="text-gray-600">
-                            Are you sure you want to permanently delete this API? This action cannot be undone.
+                            Are you sure you want to permanently delete this
+                            API? This action cannot be undone.
                           </p>
 
                           <template #footer>
@@ -496,14 +536,15 @@ const handleCancelDelete = () => {
 
         <!-- Main Content -->
         <div class="mt-6">
-          <UTabs 
-            :items="tabs" 
+          <UTabs
+            :items="tabs"
             :model-value="selectedTab"
             @update:model-value="(val: string | number) => selectedTab = val.toString()"
             variant="pill"
             :ui="{
               list: 'w-full bg-gray-100/50 backdrop-blur-sm p-1 rounded-lg',
-              trigger: 'flex-1 flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors rounded-md data-[selected=true]:text-gray-900 data-[selected=true]:bg-white data-[selected=true]:shadow-sm text-gray-500 hover:text-gray-700'
+              trigger:
+                'flex-1 flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors rounded-md data-[selected=true]:text-gray-900 data-[selected=true]:bg-white data-[selected=true]:shadow-sm text-gray-500 hover:text-gray-700',
             }"
           >
             <!-- Overview Tab -->
@@ -518,34 +559,62 @@ const handleCancelDelete = () => {
                   <UCard>
                     <template #header>
                       <div class="flex items-center gap-2">
-                        <UIcon name="i-heroicons-information-circle" class="text-primary-500" />
+                        <UIcon
+                          name="i-heroicons-information-circle"
+                          class="text-primary-500"
+                        />
                         <span class="text-lg font-medium">API Details</span>
                       </div>
                     </template>
 
                     <div class="space-y-6">
-                      <div class="bg-gray-50/80 p-5 rounded-lg border border-gray-100">
-                        <h3 class="text-sm font-medium text-gray-500 flex items-center gap-2">
-                          <UIcon name="i-heroicons-document-text" class="text-primary-500" />
+                      <div
+                        class="bg-gray-50/80 p-5 rounded-lg border border-gray-100"
+                      >
+                        <h3
+                          class="text-sm font-medium text-gray-500 flex items-center gap-2"
+                        >
+                          <UIcon
+                            name="i-heroicons-document-text"
+                            class="text-primary-500"
+                          />
                           Description
                         </h3>
                         <p class="mt-2 text-gray-900">{{ api.description }}</p>
                       </div>
 
                       <div class="grid grid-cols-2 gap-6">
-                        <div class="bg-gray-50/80 p-5 rounded-lg border border-gray-100">
-                          <h3 class="text-sm font-medium text-gray-500 flex items-center gap-2">
-                            <UIcon name="i-heroicons-clock" class="text-warning-500" />
+                        <div
+                          class="bg-gray-50/80 p-5 rounded-lg border border-gray-100"
+                        >
+                          <h3
+                            class="text-sm font-medium text-gray-500 flex items-center gap-2"
+                          >
+                            <UIcon
+                              name="i-heroicons-clock"
+                              class="text-warning-500"
+                            />
                             Rate Limit
                           </h3>
                           <div class="flex items-baseline gap-2">
-                            <span class="text-2xl font-bold text-primary-600">{{ api.rateLimit || 'No limit' }}</span>
-                            <span class="text-gray-500" v-if="api.rateLimit">requests/hour</span>
+                            <span class="text-2xl font-bold text-primary-600">{{
+                              api.rateLimit || "No limit"
+                            }}</span>
+                            <span class="text-gray-500" v-if="api.rateLimit"
+                              >requests/hour</span
+                            >
                           </div>
                         </div>
-                        <div class="bg-gray-50/80 p-5 rounded-lg border border-gray-100">
-                          <h3 class="text-sm font-medium text-gray-500 flex items-center gap-2">
-                            <UIcon name="i-heroicons-calendar" class="text-success-500" />
+                        <div
+                          class="bg-gray-50/80 p-5 rounded-lg border border-gray-100"
+                        >
+                          <h3
+                            class="text-sm font-medium text-gray-500 flex items-center gap-2"
+                          >
+                            <UIcon
+                              name="i-heroicons-calendar"
+                              class="text-success-500"
+                            />
                             Created On
                           </h3>
                           <div class="text-2xl font-bold text-gray-900">
@@ -570,7 +639,7 @@ const handleCancelDelete = () => {
                 {{ item.description }}
               </p>
 
-              <ApiEndpoints 
+              <ApiEndpoints
                 :endpoints="endpoints"
                 :apiId="api.id"
                 :isActive="api.status === 'ACTIVE'"

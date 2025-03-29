@@ -8,7 +8,8 @@ interface ApiRecord {
   baseUrl: string
   isActive: boolean
   type: string
-  createdBy: string
+  createdBy: string;
+  createdAt: string
   rateLimit: string
 }
 
@@ -103,6 +104,7 @@ export default defineEventHandler(async (event: H3Event) => {
         isActive: apiRecord.isActive,
         type: apiRecord.type,
         createdBy: apiRecord.createdBy,
+        createdAt: apiRecord.created,
         rateLimit: apiRecord.rateLimit
       }
 
