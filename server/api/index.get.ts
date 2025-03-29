@@ -35,30 +35,31 @@ export default defineEventHandler(async (event: H3Event) => {
 
     try {
       if (isAdmin) {
-        console.log('Fetching APIs for admin user')
-        // Admin can see all APIs, both active and inactive
-        const apis = await adminPb.collection('apis').getFullList()
-        return apis
+        // Admin can see all APIs from the api_details view
+        const apis = await adminPb.collection('api_details').getFullList()
+        // Transform the response to match frontend expectations
+        return apis.map(api => ({
+          id: api.id,
+          name: api.name,
+          description: api.description,
+          type: api.type,
+          status: api.status,  // Remove the boolean conversion since the view already returns correct status
+          rateLimit: api.rateLimit,
+          endpointCount: api.endpointCount,
+          createdAt: api.createdAt
+        }))
       } else if (userId) {
-        console.log('Fetching APIs for normal user:', userId)
-        
         // First get all departments
-        console.log('Fetching departments')
         const departments = await adminPb.collection('departments').getFullList()
-        console.log('Departments found:', departments.length)
         
         const activeDepartments = departments.filter(d => d.is_active === true)
-        console.log('Active departments:', activeDepartments.length)
 
         // Get user's department memberships
-        console.log('Fetching department memberships')
         const departmentUsers = await adminPb.collection('department_users').getFullList({
           filter: `user_id = "${userId}"`
         })
-        console.log('Department memberships found:', departmentUsers.length)
 
         if (departmentUsers.length === 0) {
-          console.log('No department memberships found')
           return [] // User not assigned to any department
         }
 
@@ -67,40 +68,41 @@ export default defineEventHandler(async (event: H3Event) => {
           .filter(du => activeDepartments.some(d => d.id === du.department_id))
           .map(du => du.department_id)
         
-        console.log('Active department memberships:', activeDepartmentIds.length)
 
         if (activeDepartmentIds.length === 0) {
-          console.log('No active department memberships')
           return [] // User not assigned to any active department
         }
 
         // Get APIs for active departments
-        console.log('Fetching department APIs')
         const filter = activeDepartmentIds.map(id => `department_id = "${id}"`).join(' || ')
-        console.log('Department API filter:', filter)
         
         const departmentApis = await adminPb.collection('department_apis').getFullList({
           filter
         })
-        console.log('Department APIs found:', departmentApis.length)
 
         if (departmentApis.length === 0) {
-          console.log('No APIs assigned to departments')
           return [] // No APIs assigned to user's departments
         }
 
         const apiIds = [...new Set(departmentApis.map(da => da.api_id))]
-        console.log('Unique API IDs:', apiIds.length)
         
-        const apiFilter = `(${apiIds.map(id => `id = "${id}"`).join(' || ')}) && isActive = true`
-        console.log('API filter:', apiFilter)
+        const apiFilter = `(${apiIds.map(id => `id = "${id}"`).join(' || ')}) && status = true`
         
-        const apis = await adminPb.collection('apis').getFullList({
+        const apis = await adminPb.collection('api_details').getFullList({
           filter: apiFilter
         })
-        console.log('Final APIs found:', apis.length)
 
-        return apis
+        // Transform the response to match frontend expectations
+        return apis.map(api => ({
+          id: api.id,
+          name: api.name,
+          description: api.description,
+          type: api.type,
+          status: api.status,  // Remove the boolean conversion since the view already returns correct status
+          rateLimit: api.rateLimit,
+          endpointCount: api.endpointCount,
+          createdAt: api.createdAt
+        }))
       }
 
       return []

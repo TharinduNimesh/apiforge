@@ -71,10 +71,8 @@ const validateForm = () => {
 
 const handleSave = async (event: Event) => {
   event.preventDefault();
-  console.log('Form submission started', { state: JSON.stringify(state) });
 
   if (!validateForm()) {
-    console.log('Validation errors:', errors);
     toast.add({
       title: 'Validation Error',
       description: Object.values(errors)[0],
@@ -97,7 +95,6 @@ const handleSave = async (event: Event) => {
       responses: state.responses || []
     };
     
-    console.log('Emitting save event with endpoint:', endpoint);
     emit('save', endpoint);
     emit('update:open', false); // Close modal after save
 
@@ -153,7 +150,6 @@ const parameterLocationOptions = parameterLocations.map(location => ({
 }));
 
 const addParameter = () => {
-  console.log('Adding new parameter');
   if (!state.parameters) state.parameters = [];
   state.parameters.push({
     name: '',
@@ -162,7 +158,6 @@ const addParameter = () => {
     required: true,
     description: ''
   });
-  console.log('Parameters after add:', state.parameters);
 };
 
 const removeParameter = (index: number) => {

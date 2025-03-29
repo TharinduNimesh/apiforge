@@ -249,7 +249,67 @@ const handleCancelDelete = () => {
 <template>
   <div class="py-7">
     <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
-      <div v-if="api">
+      <template v-if="loading">
+        <!-- API Header Skeleton -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+          <div class="relative p-4 sm:p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <!-- Left Side Skeleton -->
+              <div class="flex items-center gap-4">
+                <USkeleton class="w-10 h-10 rounded-lg" />
+                <div class="flex flex-col gap-3 min-w-0">
+                  <USkeleton class="h-8 w-48" />
+                  <div class="flex gap-2">
+                    <USkeleton class="h-5 w-16" />
+                    <USkeleton class="h-5 w-16" />
+                  </div>
+                </div>
+              </div>
+              <!-- Right Side Skeleton -->
+              <div class="flex gap-2 w-full sm:w-auto">
+                <USkeleton class="h-10 w-24" />
+                <USkeleton class="h-10 w-24" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabs Skeleton -->
+        <div class="mt-6">
+          <div class="bg-gray-100/50 backdrop-blur-sm p-1 rounded-lg">
+            <div class="flex gap-2 p-1">
+              <USkeleton class="h-12 w-40" />
+              <USkeleton class="h-12 w-40" />
+            </div>
+          </div>
+
+          <!-- Content Skeleton -->
+          <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2">
+              <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <USkeleton class="h-6 w-32 mb-4" />
+                <div class="space-y-4">
+                  <USkeleton class="h-24 w-full" />
+                  <div class="grid grid-cols-2 gap-4">
+                    <USkeleton class="h-24 w-full" />
+                    <USkeleton class="h-24 w-full" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="lg:col-span-1">
+              <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                <div class="space-y-4">
+                  <USkeleton class="h-6 w-32" />
+                  <USkeleton class="h-24 w-full" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <div v-else-if="api">
         <!-- API Header -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
           <div class="relative p-4 sm:p-6">

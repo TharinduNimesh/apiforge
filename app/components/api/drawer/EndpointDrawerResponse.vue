@@ -56,35 +56,26 @@ const errorDetails = computed(() => {
   if (!props.error && props.response?.statusCode >= 200 && props.response?.statusCode < 300) return null;
 
   const status = props.response?.statusCode;
-  let type = 'Error';
-  let message = props.error;
+  let type = props.response?.data?.error || 'Error';
+  let message = props.response?.data?.message || props.error;
+  let details = props.response?.data?.details;
   let color: 'warning' | 'error' = 'error';
 
   if (status) {
     if (status === 429) {
-      type = 'Rate Limit';
-      message = 'Too many requests. Please try again later.';
       color = 'warning';
     } else if (status === 403) {
-      type = 'Forbidden';
-      message = 'You do not have permission to access this API.';
       color = 'warning';
     } else if (status === 401) {
-      type = 'Unauthorized';
-      message = 'Please authenticate to access this API.';
       color = 'warning';
     } else if (status >= 500) {
-      type = 'Server Error';
-      message = 'An internal server error occurred.';
       color = 'error';
     } else if (status >= 400) {
-      type = 'Client Error';
-      message = props.response?.data?.message || 'Invalid request parameters.';
       color = 'warning';
     }
   }
 
-  return message ? { type, message, color } : null;
+  return message ? { type, message, details, color } : null;
 });
 </script>
 
@@ -108,11 +99,17 @@ const errorDetails = computed(() => {
         <UAlert
           v-if="errorDetails"
           :title="errorDetails.type"
-          :description="errorDetails.message || undefined"
           :color="(errorDetails.color as any) || undefined"
           variant="soft"
           icon="i-heroicons-exclamation-triangle"
-        />
+        >
+          <template #description>
+            <p>{{ errorDetails.message }}</p>
+            <p v-if="errorDetails.details" class="mt-2 text-sm opacity-75">
+              {{ errorDetails.details }}
+            </p>
+          </template>
+        </UAlert>
 
         <!-- Response Section -->
         <div v-if="responseData" class="space-y-4">

@@ -35,7 +35,7 @@ const fetchApis = async () => {
       name: string;
       description: string;
       type: 'FREE' | 'PAID';
-      isActive: boolean;
+      status: boolean;  // Changed from isActive to status to match the view
       rateLimit: number;
       endpointCount: number;
       createdAt: string;
@@ -44,7 +44,7 @@ const fetchApis = async () => {
       name: record.name,
       description: record.description,
       type: record.type,
-      status: record.isActive ? 'ACTIVE' : 'INACTIVE',
+      status: record.status ? 'ACTIVE' : 'INACTIVE',  // Changed from isActive to status
       rateLimit: record.rateLimit,
       endpointCount: record.endpointCount,
       createdAt: record.createdAt

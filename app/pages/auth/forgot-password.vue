@@ -16,8 +16,6 @@ const status = ref<string | null>(null);
 
 async function submit(event: any) {
     // TODO: Implement password reset logic
-    console.log(event);
-    // Simulate success status for now
     status.value = 'We have emailed your password reset link.';
 }
 </script>

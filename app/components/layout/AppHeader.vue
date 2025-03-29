@@ -44,7 +44,7 @@ const dropdownItems = computed(() => [
     {
         label: "Profile Settings",
         icon: "i-heroicons-user",
-        click: () => router.push('/profile')
+        onSelect: () => router.push('/console/profile')
     },
     {
         label: "Logout",
@@ -75,7 +75,7 @@ const sidebarMenuItems = computed<MenuItem[]>(() => [
     {
         label: "Profile Settings",
         icon: "i-heroicons-user",
-        to: "/profile",
+        to: "/console/profile",
     },
     {
         label: "Logout",

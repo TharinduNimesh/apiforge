@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { ApiEndpoint } from '~/types/api';
+import { usePocketBase } from '~/lib/pocketbase';
+
+const pb = usePocketBase();
 
 const props = defineProps<{
   endpoint: ApiEndpoint;
@@ -77,10 +80,13 @@ defineExpose({
         }
       });
 
-      // Make API call using the endpoint ID
+      // Make API call using the endpoint ID with authorization token
       const response = await $fetch(`/api/call-endpoint/${props.endpoint.id}`, {
         method: 'POST',
-        body: processedData
+        body: processedData,
+        headers: {
+          'Authorization': `Bearer ${pb.authStore.token}`
+        }
       });
 
       emit('response', response);
