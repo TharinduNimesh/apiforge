@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { Department } from '~/types/department';
-import type { Api } from '~/types/api';
-import { ref, watchEffect, onMounted } from 'vue';
-import { usePocketBase } from '~/lib/pocketbase';
+import type { Department } from "~/types/department";
+import type { Api } from "~/types/api";
+import { ref, watchEffect, onMounted } from "vue";
+import { usePocketBase } from "~/lib/pocketbase";
 
 interface Props {
   department: Department;
@@ -12,7 +12,7 @@ interface Props {
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
-  (e: 'update:apiAssignments', assignments: Department['apiAssignments']): void;
+  (e: "update:apiAssignments", assignments: Department["apiAssignments"]): void;
 }>();
 
 const pb = usePocketBase();
@@ -24,12 +24,12 @@ const newRateLimit = ref<number>(100);
 
 // Track original rate limits and assignments
 const originalRateLimits = ref<Record<string, number>>({});
-const departmentApiRecords = ref<Record<string, string>>({});  // Store API assignment record IDs
-const currentRateLimits = ref<Record<string, number>>({});  // Track current rate limits
+const departmentApiRecords = ref<Record<string, string>>({}); // Store API assignment record IDs
+const currentRateLimits = ref<Record<string, number>>({}); // Track current rate limits
 
 // Update tracking when assignments change
 watchEffect(() => {
-  props.department.apiAssignments.forEach(assignment => {
+  props.department.apiAssignments.forEach((assignment) => {
     if (!(assignment.apiId in originalRateLimits.value)) {
       originalRateLimits.value[assignment.apiId] = assignment.rateLimit;
       currentRateLimits.value[assignment.apiId] = assignment.rateLimit;
@@ -40,15 +40,15 @@ watchEffect(() => {
 // Track API assignment record IDs
 const fetchApiAssignmentRecords = async () => {
   try {
-    const records = await pb.collection('department_apis').getList(1, 50, {
-      filter: `department_id = "${props.department.id}"`
+    const records = await pb.collection("department_apis").getList(1, 50, {
+      filter: `department_id = "${props.department.id}"`,
     });
-    
-    records.items.forEach(record => {
+
+    records.items.forEach((record) => {
       departmentApiRecords.value[record.api_id] = record.id;
     });
   } catch (error) {
-    console.error('Error fetching API assignment records:', error);
+    console.error("Error fetching API assignment records:", error);
   }
 };
 
@@ -62,7 +62,7 @@ const isRateLimitChanged = (apiId: string, currentLimit: number) => {
 };
 
 const getApiDetails = (apiId: string) => {
-  return props.apis.find(api => api.id === apiId);
+  return props.apis.find((api) => api.id === apiId);
 };
 
 const handleApiAssign = async () => {
@@ -70,29 +70,31 @@ const handleApiAssign = async () => {
 
   try {
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const newAssignments = [...props.department.apiAssignments, {
-      apiId: selectedApi.value.id,
-      rateLimit: newRateLimit.value
-    }];
-    
-    emit('update:apiAssignments', newAssignments);
-    
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const newAssignments = [
+      ...props.department.apiAssignments,
+      {
+        apiId: selectedApi.value.id,
+        rateLimit: newRateLimit.value,
+      },
+    ];
+
+    emit("update:apiAssignments", newAssignments);
+
     toast.add({
-      title: 'Success',
-      description: 'API assigned successfully',
-      color: 'success',
+      title: "Success",
+      description: "API assigned successfully",
+      color: "success",
     });
-    
+
     // Reset form state
-    selectedApi.value = undefined;
     newRateLimit.value = 100;
   } catch (error: any) {
     toast.add({
-      title: 'Error',
-      description: error.message || 'Failed to assign API',
-      color: 'error',
+      title: "Error",
+      description: error.message || "Failed to assign API",
+      color: "error",
     });
   }
 };
@@ -102,21 +104,23 @@ const handleApiRemove = async (apiId: string) => {
 
   try {
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const newAssignments = props.department.apiAssignments.filter(a => a.apiId !== apiId);
-    emit('update:apiAssignments', newAssignments);
-    
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const newAssignments = props.department.apiAssignments.filter(
+      (a) => a.apiId !== apiId
+    );
+    emit("update:apiAssignments", newAssignments);
+
     toast.add({
-      title: 'Success',
-      description: 'API removed successfully',
-      color: 'success',
+      title: "Success",
+      description: "API removed successfully",
+      color: "success",
     });
   } catch (error: any) {
     toast.add({
-      title: 'Error',
-      description: error.message || 'Failed to remove API',
-      color: 'error',
+      title: "Error",
+      description: error.message || "Failed to remove API",
+      color: "error",
     });
   }
 };
@@ -127,35 +131,35 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
   try {
     const recordId = departmentApiRecords.value[apiId];
     if (!recordId) {
-      throw new Error('API assignment record not found');
+      throw new Error("API assignment record not found");
     }
 
     // Update rate limit in PocketBase
-    await pb.collection('department_apis').update(recordId, {
-      rate_limit: newLimit
+    await pb.collection("department_apis").update(recordId, {
+      rate_limit: newLimit,
     });
-    
+
     // Update local state
-    const newAssignments = props.department.apiAssignments.map(assignment =>
-      assignment.apiId === apiId 
+    const newAssignments = props.department.apiAssignments.map((assignment) =>
+      assignment.apiId === apiId
         ? { ...assignment, rateLimit: newLimit }
         : assignment
     );
-    
-    emit('update:apiAssignments', newAssignments);
+
+    emit("update:apiAssignments", newAssignments);
     originalRateLimits.value[apiId] = newLimit; // Update the original value after successful update
-    
+
     toast.add({
-      title: 'Success',
-      description: 'Rate limit updated successfully',
-      color: 'success',
+      title: "Success",
+      description: "Rate limit updated successfully",
+      color: "success",
     });
   } catch (error: any) {
-    console.error('Error updating rate limit:', error);
+    console.error("Error updating rate limit:", error);
     toast.add({
-      title: 'Error',
-      description: error.message || 'Failed to update rate limit',
-      color: 'error',
+      title: "Error",
+      description: error.message || "Failed to update rate limit",
+      color: "error",
     });
   }
 };
@@ -174,7 +178,7 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
           :close="{
             color: 'neutral',
             variant: 'ghost',
-            class: 'rounded-full'
+            class: 'rounded-full',
           }"
         >
           <UButton
@@ -192,10 +196,9 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
             <div class="space-y-4">
               <UFormField label="Select API">
                 <USelectMenu
-                  v-model="selectedApi"
+                  v-model="(selectedApi as unknown as string)"
                   :items="availableApis"
-                  option-attribute="name"
-                  value-attribute="id"
+                  label-key="name"
                   placeholder="Choose an API"
                   :selected-value="selectedApi?.id"
                   class="w-full"
@@ -220,9 +223,7 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
               </UFormField>
 
               <UFormField label="Rate Limit">
-                <UInput
-                  v-model="newRateLimit"
-                >
+                <UInput v-model="newRateLimit">
                   <template #trailing>/hour</template>
                 </UInput>
               </UFormField>
@@ -271,8 +272,16 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
         <div class="flex items-center justify-between gap-4">
           <div class="flex items-center gap-2 min-w-0">
             <UBadge
-              :color="getApiDetails(assignment.apiId)?.type === 'PAID' ? 'warning' : 'success'"
-              :label="getApiDetails(assignment.apiId)?.type === 'PAID' ? 'Premium' : 'Free'"
+              :color="
+                getApiDetails(assignment.apiId)?.type === 'PAID'
+                  ? 'warning'
+                  : 'success'
+              "
+              :label="
+                getApiDetails(assignment.apiId)?.type === 'PAID'
+                  ? 'Premium'
+                  : 'Free'
+              "
               variant="subtle"
             />
             <div class="flex-1 min-w-0">
@@ -288,22 +297,36 @@ const handleRateLimitUpdate = async (apiId: string, newLimit: number) => {
           <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
               <UInput
-                :model-value="currentRateLimits[assignment.apiId] ?? assignment.rateLimit"
-                @update:model-value="(value) => {
-                  currentRateLimits[assignment.apiId] = Number(value);
-                  isRateLimitChanged(assignment.apiId, Number(value));
-                }"
+                :model-value="
+                  currentRateLimits[assignment.apiId] ?? assignment.rateLimit
+                "
+                @update:model-value="
+                  (value) => {
+                    currentRateLimits[assignment.apiId] = Number(value);
+                    isRateLimitChanged(assignment.apiId, Number(value));
+                  }
+                "
                 :disabled="!department.isActive"
               >
                 <template #trailing>/hour</template>
               </UInput>
 
               <UButton
-                v-if="isRateLimitChanged(assignment.apiId, currentRateLimits[assignment.apiId] ?? assignment.rateLimit)"
+                v-if="
+                  isRateLimitChanged(
+                    assignment.apiId,
+                    currentRateLimits[assignment.apiId] ?? assignment.rateLimit
+                  )
+                "
                 color="success"
                 variant="ghost"
                 icon="i-heroicons-check"
-                @click="handleRateLimitUpdate(assignment.apiId, currentRateLimits[assignment.apiId] || assignment.rateLimit)"
+                @click="
+                  handleRateLimitUpdate(
+                    assignment.apiId,
+                    currentRateLimits[assignment.apiId] || assignment.rateLimit
+                  )
+                "
                 :disabled="!department.isActive"
               />
             </div>

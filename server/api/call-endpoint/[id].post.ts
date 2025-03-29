@@ -1,4 +1,5 @@
 import { getAdminPocketBase, getUserPocketBase } from '../../utils/pocketbase'
+import { getRateLimit, incrementRateLimit } from '../../utils/redis'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -102,7 +103,7 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    // For non-admin users, check department access
+    // For non-admin users, check department access and rate limits
     if (!isAdmin) {
       // First get user's departments and expand department data
       const departments = await adminPb.collection('departments').getFullList()
@@ -131,18 +132,39 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      // Check API access for active departments
+      // Check API access and get maximum rate limit for active departments
       const filter = activeDepartmentIds.map(dId => `department_id = "${dId}"`).join(' || ')
       const departmentApis = await adminPb.collection('department_apis').getFullList({
-        filter
+        filter: `(${filter}) && api_id = "${endpoint.expand?.api?.id}"`
       })
 
-      if (!departmentApis.some(da => da.api_id === endpoint.expand?.api?.id)) {
+      if (!departmentApis.length) {
         throw createError({
           statusCode: 403,
           message: 'Access denied to this API'
         })
       }
+
+      // Get the highest rate limit among all departments
+      const maxRateLimit = Math.max(...departmentApis.map(da => da.rate_limit))
+
+      // Check rate limit
+      const rateLimitKey = `ratelimit:${userId}:${endpoint.expand?.api?.id}`
+      const currentRequests = await getRateLimit(rateLimitKey)
+
+      if (currentRequests >= maxRateLimit) {
+        throw createError({
+          statusCode: 429,
+          message: `Rate limit exceeded. Maximum ${maxRateLimit} requests per hour allowed.`
+        })
+      }
+
+      // Increment rate limit counter with 1-hour TTL
+      await incrementRateLimit(rateLimitKey, 3600)
+
+      // Add rate limit headers
+      event.node.res.setHeader('X-RateLimit-Limit', maxRateLimit.toString())
+      event.node.res.setHeader('X-RateLimit-Remaining', (maxRateLimit - (currentRequests + 1)).toString())
     }
 
     // Get all parameters for this endpoint
@@ -179,10 +201,8 @@ export default defineEventHandler(async (event) => {
     })
 
     // Construct URL - ensure both baseUrl and path are properly combined
-    // Remove trailing slash from baseUrl and leading slash from path
     const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
     const cleanPath = path.startsWith('/') ? path.slice(1) : path
-    // Handle case where path is just '/' by using base URL directly
     const url = new URL(cleanPath === '' ? cleanBaseUrl : `${cleanBaseUrl}/${cleanPath}`)
     
     // Handle other parameter types
@@ -244,7 +264,6 @@ export default defineEventHandler(async (event) => {
               requestBody ? JSON.stringify(requestBody) : undefined
       });
     } catch (error: any) {
-      // Handle network errors or failed fetch attempts
       return {
         statusCode: 503,
         data: {

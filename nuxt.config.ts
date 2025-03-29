@@ -29,5 +29,9 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     PB_SUPER_ADMIN_KEY: process.env.PB_SUPER_ADMIN_KEY,
+    redis: {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379')
+    }
   }
 })

@@ -77,6 +77,32 @@ const errorDetails = computed(() => {
 
   return message ? { type, message, details, color } : null;
 });
+
+// Add new computed property for rate limit info
+const rateLimitInfo = computed(() => {
+  if (!props.response?.rateLimit) return null;
+  
+  const { limit, remaining } = props.response.rateLimit;
+  if (!limit || remaining === undefined) return null;
+
+  const used = limit - remaining;
+  const percentage = Math.round((used / limit) * 100);
+  
+  let color: 'success' | 'warning' | 'error' = 'success';
+  if (percentage >= 90) {
+    color = 'error';
+  } else if (percentage >= 75) {
+    color = 'warning';
+  }
+
+  return {
+    limit,
+    remaining,
+    used,
+    percentage,
+    color
+  };
+});
 </script>
 
 <template>
@@ -124,6 +150,23 @@ const errorDetails = computed(() => {
                 Status: {{ response.statusCode }}
               </span>
             </div>
+
+            <!-- Rate Limit Information -->
+            <div v-if="rateLimitInfo" class="flex items-center gap-3">
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-chart-bar" class="w-4 h-4 text-gray-500" />
+                <span class="text-sm text-gray-600">
+                  {{ rateLimitInfo.remaining }}/{{ rateLimitInfo.limit }} requests remaining
+                </span>
+              </div>
+              <UProgress
+                :value="rateLimitInfo.percentage"
+                :color="rateLimitInfo.color"
+                size="xs"
+                class="w-20"
+              />
+            </div>
+
             <UButton
               icon="i-heroicons-clipboard"
               color="neutral"

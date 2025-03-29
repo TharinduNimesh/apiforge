@@ -89,12 +89,27 @@ defineExpose({
         }
       });
 
+      // Include rate limit info in the response
       emit('response', response);
     } catch (error: any) {
       console.error('API call error:', error);
-      emit('error', error.message || 'Failed to make API call');
-      if (error.data) {
-        emit('response', { status: error.status, data: error.data });
+      
+      // Handle rate limit exceeded specifically
+      if (error.status === 429) {
+        const response = {
+          statusCode: 429,
+          data: {
+            error: 'Rate Limit Exceeded',
+            message: error.data?.message || 'You have exceeded your rate limit for this API.',
+            details: 'Please try again later or contact your department administrator if you need a higher rate limit.'
+          }
+        };
+        emit('response', response);
+      } else {
+        emit('error', error.message || 'Failed to make API call');
+        if (error.data) {
+          emit('response', { status: error.status, data: error.data });
+        }
       }
     } finally {
       loading.value = false;

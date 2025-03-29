@@ -8,5 +8,14 @@ services:
     volumes:
       - pb_data:/pb/pb_data
 
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
 volumes:
   pb_data:
+  redis_data:
