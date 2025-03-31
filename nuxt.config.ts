@@ -32,6 +32,9 @@ export default defineNuxtConfig({
     redis: {
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379')
+    },
+    public: {
+      appUrl: process.env.APP_URL,
     }
   }
 })

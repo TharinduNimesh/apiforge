@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ApiEndpoint } from '~/types/api';
 import EndpointDrawer from './drawer/EndpointDrawer.vue';
+import DocumentationDrawer from './drawer/DocumentationDrawer.vue';
 import { usePocketBase } from '~/lib/pocketbase';
 
 type NuxtUIColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral';
@@ -187,13 +188,17 @@ const endpointItems = computed<EndpointAccordionItem[]>(() => {
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div class="flex items-center justify-end gap-2">
+                  <DocumentationDrawer
+                    v-if="endpoint"
+                    :endpoint="endpoint"
+                  />
                   <EndpointDrawer
                     v-if="endpoint"
                     :endpoint="endpoint"
                     :api="{ id: endpoint.id }"
                   />
                   <!-- Delete Modal -->
-                  <UModal v-model:open="showDeleteModal">
+                  <UModal v-if="isAdmin()" v-model:open="showDeleteModal">
                     <UButton
                       v-if="isActive"
                       color="error"
