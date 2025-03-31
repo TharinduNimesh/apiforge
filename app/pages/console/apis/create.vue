@@ -40,7 +40,7 @@ const schema = z.object({
     parameters: z.array(z.object({
       name: z.string(),
       type: z.string(),
-      in: z.enum(['body', 'header', 'path', 'query', 'formData'] as const),
+      param_in: z.enum(['body', 'header', 'path', 'query', 'formData'] as const),
       required: z.boolean(),
       description: z.string().default('')
     })),
@@ -123,7 +123,7 @@ const handleSubmit = async (event: FormSubmitEvent<Schema>) => {
         const paramData = {
           name: param.name,
           type: param.type,
-          param_in: param.in,
+          param_in: param.param_in,
           required: param.required,
           description: param.description,
           endpoint: endpointRecord.id
@@ -327,7 +327,7 @@ const handleSubmit = async (event: FormSubmitEvent<Schema>) => {
                           />
                           <UBadge
                             color="neutral"
-                            :label="param.in"
+                            :label="param.param_in"
                             variant="subtle"
                             size="xs"
                           />

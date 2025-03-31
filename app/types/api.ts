@@ -22,13 +22,16 @@ export interface ApiEndpoint {
 export interface ApiParameter {
   name: string;
   type: string;
-  param_in: 'query' | 'path' | 'header' | 'body' | 'formData';
-  description: string;
+  param_in: 'body' | 'header' | 'path' | 'query' | 'formData';
   required: boolean;
+  description: string;
+  file_options?: string; // Raw file options string from the server
   fileConfig?: {
-    multiple?: boolean;
+    multiple: boolean;
+    maxSize: number;
+    accept: string[] | string;
   };
-};
+}
 
 export interface ApiResponse {
   code: number;

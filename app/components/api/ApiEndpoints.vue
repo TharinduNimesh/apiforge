@@ -12,6 +12,14 @@ interface Props {
   isActive?: boolean;
 }
 
+interface ExtendedEndpoint extends ApiEndpoint {
+  fileConfig?: {
+    multiple: boolean;
+    maxSize: number;
+    accept: string[] | string;
+  };
+}
+
 const pb = usePocketBase();
 const props = withDefaults(defineProps<Props>(), {
   endpoints: () => [],
@@ -22,7 +30,7 @@ const emit = defineEmits<{
   (e: 'refresh'): void;
 }>();
 
-const selectedEndpoint = ref<ApiEndpoint | null>(null);
+const selectedEndpoint = ref<ExtendedEndpoint | null>(null);
 const loading = ref(false);
 
 // Add new ref for tracking expanded rows

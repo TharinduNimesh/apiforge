@@ -10,6 +10,38 @@ interface ExtendedApiEndpoint extends ApiEndpoint {
   isNew?: boolean; // Add this to track new endpoints
 }
 
+// Add file configuration interface
+interface FileParameterConfig {
+  multiple: boolean;
+  maxSize: number; // in bytes
+  accept: string[] | string;
+}
+
+// Common MIME type options
+interface MimeTypeOption {
+  label: string;
+  value: string;
+}
+
+const mimeTypeOptions: MimeTypeOption[] = [
+  { label: 'Images (All)', value: 'image/*' },
+  { label: 'PNG Image', value: 'image/png' },
+  { label: 'JPEG Image', value: 'image/jpeg' },
+  { label: 'GIF Image', value: 'image/gif' },
+  { label: 'PDF Document', value: 'application/pdf' },
+  { label: 'Word Document', value: 'application/msword' },
+  { label: 'Excel Spreadsheet', value: 'application/vnd.ms-excel' },
+  { label: 'Text File', value: 'text/plain' },
+  { label: 'JSON', value: 'application/json' },
+  { label: 'ZIP Archive', value: 'application/zip' },
+  { label: 'All Files', value: '*/*' }
+];
+
+// Extend ApiParameter to include file configuration
+interface ExtendedApiParameter extends ApiParameter {
+  fileConfig?: FileParameterConfig;
+}
+
 interface Props {
   endpoint?: ExtendedApiEndpoint;
 }
@@ -75,6 +107,37 @@ const open = ref(false);
 const pb = usePocketBase();
 const confirmModalOpen = ref(false);
 const loading = ref(false);
+
+// Add functions to handle parameter type changes
+const handleParameterTypeChange = (param: ApiParameter, index: number) => {
+  if (param.type === 'file') {
+    console.log('Parameter type changed to file:', { paramName: param.name, index });
+    // Auto-set location to formData for file uploads
+    param.param_in = 'formData';
+    
+    // Initialize file config if not exists
+    if (!param.fileConfig) {
+      console.log('Initializing file config for parameter:', param.name);
+      param.fileConfig = {
+        multiple: false,
+        maxSize: 2 * 1024 * 1024, // 2MB default
+        accept: ['*/*'] // Initialize with an array containing the default accept all value
+      };
+    }
+  }
+};
+
+// Watch parameter type changes
+watch(() => state.parameters, (parameters) => {
+  if (parameters) {
+    parameters.forEach(param => {
+      if (param.type === 'file' && param.param_in !== 'formData') {
+        console.log('Auto-correcting param_in to formData for file parameter:', param.name);
+        param.param_in = 'formData';
+      }
+    });
+  }
+}, { deep: true });
 
 const validateForm = () => {
   errors.name = '';
@@ -181,6 +244,7 @@ const handleCancel = () => {
 const handleConfirmSave = async () => {
   loading.value = true;
   try {
+    console.log('Starting endpoint save process...');
     const endpointData: Record<string, any> = {
       name: state.name,
       description: state.description || '',
@@ -190,9 +254,10 @@ const handleConfirmSave = async () => {
 
     let savedEndpoint: RecordModel;
     if (props.endpoint) {
+      console.log('Updating existing endpoint:', props.endpoint.id);
       savedEndpoint = await pb.collection('endpoints').update(props.endpoint.id, endpointData);
     } else {
-      // For new endpoints, we need the api ID from the parent component
+      console.log('Creating new endpoint');
       endpointData.api = state.api || '';
       savedEndpoint = await pb.collection('endpoints').create(endpointData);
     }
@@ -203,6 +268,7 @@ const handleConfirmSave = async () => {
       const existingParamsList = await pb.collection('parameters').getFullList({
         filter: `endpoint = "${props.endpoint.id}"`
       });
+      console.log('Found existing parameters:', existingParamsList.length);
       existingParamsList.forEach(param => {
         existingParameters.set(param.name, param);
       });
@@ -213,23 +279,49 @@ const handleConfirmSave = async () => {
       const updatedParameterNames = new Set();
 
       for (const param of state.parameters) {
+        // Prepare file options for file type parameters
+        const fileOptions = param.type === 'file' && param.fileConfig ? {
+          multiple: param.fileConfig.multiple || false,
+          maxSize: param.fileConfig.maxSize || 2 * 1024 * 1024,
+          accept: Array.isArray(param.fileConfig.accept) ? param.fileConfig.accept : [param.fileConfig.accept || '*/*']
+        } : null;
+
+        if (param.type === 'file') {
+          console.log('Processing file parameter:', {
+            paramName: param.name,
+            fileConfig: param.fileConfig,
+            processedFileOptions: fileOptions
+          });
+        }
+
         const paramData = {
           name: param.name,
           description: param.description || '',
           type: param.type,
           param_in: param.param_in,
           required: param.required,
-          endpoint: savedEndpoint.id
+          endpoint: savedEndpoint.id,
+          file_options: fileOptions ? (typeof fileOptions === 'string' ? fileOptions : JSON.stringify(fileOptions)) : null
         };
 
         // Check if this parameter already exists
         const existingParam = existingParameters.get(param.name);
-        
+
         if (existingParam) {
-          // Update existing parameter
+          console.log('Updating existing parameter:', {
+            paramName: param.name,
+            type: param.type,
+            isFile: param.type === 'file',
+            fileOptions: fileOptions
+          });
           await pb.collection('parameters').update(existingParam.id, paramData);
         } else {
-          // Create new parameter
+          console.log('Creating new parameter:', {
+            paramName: param.name,
+            type: param.type,
+            isFile: param.type === 'file',
+            fileOptions: fileOptions
+          });
           await pb.collection('parameters').create(paramData);
         }
 
@@ -239,6 +331,7 @@ const handleConfirmSave = async () => {
       // Delete parameters that were removed
       for (const [name, param] of existingParameters) {
         if (!updatedParameterNames.has(name)) {
+          console.log('Deleting removed parameter:', name);
           await pb.collection('parameters').delete(param.id);
         }
       }
@@ -247,6 +340,7 @@ const handleConfirmSave = async () => {
       const existingParamsList = await pb.collection('parameters').getFullList({
         filter: `endpoint = "${props.endpoint.id}"`
       });
+      console.log('Deleting all parameters as none specified:', existingParamsList.length);
       for (const param of existingParamsList) {
         await pb.collection('parameters').delete(param.id);
       }
@@ -411,6 +505,7 @@ const handleCancelSave = () => {
                         option-value="value"
                         value-key="value"
                         :ui="{ base: 'w-full' }"
+                        @change="handleParameterTypeChange(param, index)"
                       />
                     </UFormField>
 
@@ -424,7 +519,12 @@ const handleCancelSave = () => {
                         option-value="value"
                         value-key="value"
                         :ui="{ base: 'w-full' }"
+                        :disabled="param.type === 'file'"
+                        @change="param.type === 'file' ? param.param_in = 'formData' : null"
                       />
+                      <template v-if="param.type === 'file'" #help>
+                        <span class="text-xs text-gray-500">File parameters must use Form Data location</span>
+                      </template>
                     </UFormField>
                   </div>
 
@@ -458,6 +558,126 @@ const handleCancelSave = () => {
                       @click="removeParameter(index)"
                       size="sm"
                     />
+                  </div>
+                </div>
+
+                <!-- File Upload Options -->
+                <div v-if="param.type === 'file'" class="border-t border-gray-200 mt-4 pt-4">
+                  <div class="flex items-center gap-2 mb-4">
+                    <UIcon name="i-heroicons-document-arrow-up" class="w-5 h-5 text-primary-500" />
+                    <h4 class="text-base font-medium text-gray-900">File Upload Options</h4>
+                  </div>
+                  
+                  <div class="space-y-4">
+                    <!-- Multiple Files Option -->
+                    <UFormField label="Allow Multiple Files">
+                      <div class="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                        <UCheckbox
+                          :model-value="param.fileConfig?.multiple || false"
+                          @update:model-value="
+                            (val: boolean | 'indeterminate') => {
+                              if (!param.fileConfig) {
+                                param.fileConfig = {
+                                  multiple: false,
+                                  maxSize: 2 * 1024 * 1024,
+                                  accept: ['*/*']
+                                };
+                              }
+                              param.fileConfig.multiple = val === true;
+                            }
+                          "
+                        />
+                        <div>
+                          <span class="text-sm font-medium text-gray-900">Allow users to upload multiple files</span>
+                          <p class="text-xs text-gray-500">Enable selection of multiple files in a single upload</p>
+                        </div>
+                      </div>
+                    </UFormField>
+
+                    <!-- File Size Limit -->
+                    <UFormField label="Size Limit" help="Maximum allowed file size">
+                      <div class="flex items-center gap-2">
+                        <UInput
+                          :model-value="param.fileConfig?.maxSize || 2097152"
+                          type="number"
+                          :min="0"
+                          :step="1024"
+                          class="flex-1"
+                          @update:model-value="
+                            (val: string | number) => {
+                              if (!param.fileConfig) {
+                                param.fileConfig = {
+                                  multiple: false,
+                                  maxSize: 2 * 1024 * 1024,
+                                  accept: ['*/*']
+                                };
+                              }
+                              param.fileConfig.maxSize = typeof val === 'string' ? parseInt(val) : val;
+                            }
+                          "
+                        >
+                          <template #trailing>
+                            <span class="text-sm text-gray-500">bytes</span>
+                          </template>
+                        </UInput>
+                        <UBadge
+                          color="neutral"
+                          variant="subtle"
+                          class="text-xs"
+                          :label="((param.fileConfig?.maxSize || 0) / (1024 * 1024)).toFixed(2) + ' MB'"
+                        />
+                      </div>
+                    </UFormField>
+
+                    <!-- Accepted MIME Types -->
+                    <UFormField label="Accepted File Types" help="Select one or more file types that will be accepted">
+                      <USelectMenu
+                        :model-value="(Array.isArray(param.fileConfig?.accept) 
+                          ? mimeTypeOptions.filter(opt => param.fileConfig?.accept && (param.fileConfig.accept as string[]).includes(opt.value))
+                          : param.fileConfig?.accept 
+                            ? [mimeTypeOptions.find(opt => opt.value === param.fileConfig?.accept)].filter(Boolean)
+                            : [mimeTypeOptions[0]]
+                        ) as MimeTypeOption[]"
+                        :items="mimeTypeOptions"
+                        multiple
+                        placeholder="Select accepted file types"
+                        class="w-full"
+                        @update:model-value="
+                          (val: MimeTypeOption[]) => {
+                            if (!param.fileConfig) {
+                              param.fileConfig = {
+                                multiple: false,
+                                maxSize: 2 * 1024 * 1024,
+                                accept: []
+                              };
+                            }
+                            param.fileConfig.accept = val.map(v => v.value);
+                          }
+                        "
+                      >
+                        <template #item="{ item }">
+                          <div v-if="item" class="flex items-center gap-2 py-1">
+                            <UIcon 
+                              :name="item.value.startsWith('image/') ? 'i-heroicons-photo' : 
+                                    item.value.includes('pdf') ? 'i-heroicons-document' :
+                                    item.value.includes('word') ? 'i-heroicons-document-text' :
+                                    item.value === '*/*' ? 'i-heroicons-document-duplicate' :
+                                    'i-heroicons-document'"
+                              class="flex-shrink-0 w-4 h-4 text-gray-500"
+                            />
+                            <span class="text-sm">{{ item.label }}</span>
+                            <UBadge
+                              v-if="item.value !== '*/*'"
+                              color="neutral"
+                              variant="subtle"
+                              size="xs"
+                              class="ml-auto text-[10px] font-mono"
+                              :label="item.value"
+                            />
+                          </div>
+                        </template>
+                      </USelectMenu>
+                    </UFormField>
                   </div>
                 </div>
               </UCard>

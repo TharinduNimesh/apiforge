@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Api, ApiEndpoint } from "~/types/api";
+import type { Api, ApiEndpoint, ApiParameter } from "~/types/api";
 import { ref, computed } from "vue";
 import EndpointModal from "~/components/api/EndpointModal.vue";
 import { usePocketBase } from "~/lib/pocketbase";
@@ -9,29 +9,45 @@ definePageMeta({
 });
 
 const route = useRoute();
+interface EndpointWithParams extends ApiEndpoint {
+  parameters: ApiParameter[];
+}
+
 const api = ref<Api | undefined>();
-const endpoints = ref<ApiEndpoint[]>([]);
+const endpoints = ref<EndpointWithParams[]>([]);
 const selectedTab = ref("overview");
 const loading = ref(false);
 const pb = usePocketBase();
 
-interface ServerEndpoint {
-  id: string;
-  name: string;
-  description: string;
-  path: string;
-  method: string;
-  parameters: ServerParameter[];
-}
-
-interface ServerParameter {
-  id: string;
-  name: string;
-  description: string;
-  type: string;
-  required: boolean;
-  param_in: string;
-}
+const transformEndpoints = (data: any[]): EndpointWithParams[] => {
+  return data.map(endpoint => ({
+    ...endpoint,
+    parameters: endpoint.parameters.map((param: any) => {
+      if (param.type === 'file' && param.file_options) {
+        try {
+          const fileConfig = typeof param.file_options === 'string'
+            ? JSON.parse(param.file_options)
+            : param.file_options;
+          return {
+            ...param,
+            fileConfig
+          };
+        } catch (e) {
+          console.error('Error parsing file_options:', e);
+          return {
+            ...param,
+            fileConfig: {
+              multiple: false,
+              maxSize: 2 * 1024 * 1024,
+              accept: ['*/*']
+            }
+          };
+        }
+      }
+      return param;
+    })
+  }));
+};
 
 const fetchApi = async () => {
   try {
@@ -51,7 +67,6 @@ const fetchApi = async () => {
 
     const data = await response.json();
 
-    // Transform the data to match our Api type
     api.value = {
       id: data.id,
       name: data.name,
@@ -60,26 +75,10 @@ const fetchApi = async () => {
       status: data.isActive ? "ACTIVE" : "INACTIVE",
       rateLimit: data.rateLimit,
       endpointCount: data.endpoints?.length || 0,
-      createdAt: data.createdAt, // Assuming the server sends this
+      createdAt: data.createdAt,
     };
 
-    // Update endpoints with proper type annotations
-    endpoints.value = data.endpoints.map((endpoint: ServerEndpoint) => ({
-      id: endpoint.id,
-      name: endpoint.name,
-      description: endpoint.description,
-      path: endpoint.path,
-      method: endpoint.method,
-      parameters: endpoint.parameters.map((param: ServerParameter) => ({
-        id: param.id,
-        name: param.name,
-        description: param.description,
-        type: param.type,
-        required: param.required,
-        param_in: param.param_in,
-      })),
-      responses: [],
-    }));
+    endpoints.value = transformEndpoints(data.endpoints || []);
   } catch (error) {
     console.error("Error fetching API:", error);
     showError({ statusCode: 404, message: "API not found" });

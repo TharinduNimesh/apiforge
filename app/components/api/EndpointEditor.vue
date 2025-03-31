@@ -28,7 +28,7 @@ const rules = {
 const addParameter = () => {
   currentEndpoint.value.parameters.push({
     name: '',
-    in: 'query',
+    param_in: 'query',
     type: 'string',
     required: true,
     description: ''
@@ -46,7 +46,7 @@ const handleSave = () => {
 // Watch for type changes to handle file parameter specifics
 const handleParameterTypeChange = (param: ApiParameter) => {
   if (param.type === 'file') {
-    param.in = 'body';
+    param.param_in = 'formData';
   }
 };
 
@@ -155,7 +155,7 @@ const isValid = computed(() => {
 
               <UFormField label="Location" :name="`param-${index}-location`">
                 <USelect
-                  v-model="param.in"
+                  v-model="param.param_in"
                   :options="parameterLocations"
                   option-attribute="value"
                   :disabled="param.type === 'file'"

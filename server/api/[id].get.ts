@@ -28,12 +28,13 @@ interface EndpointRecord extends BaseRecord {
 }
 
 interface ParameterRecord extends BaseRecord {
-  name: string
-  description: string
-  type: string
-  param_in: string
-  required: boolean
-  endpoint: string
+  name: string;
+  description: string;
+  type: string;
+  param_in: string;
+  required: boolean;
+  endpoint: string;
+  file_options?: string;
 }
 
 interface Department extends BaseRecord {
@@ -54,19 +55,20 @@ interface ApiResponse {
 }
 
 interface EndpointWithParams {
-  id: string
-  name: string
-  description: string
-  path: string
-  method: string
-  api: string
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  method: string;
+  api: string;
   parameters: Array<{
-    name: string
-    description: string
-    type: string
-    param_in: string
-    required: boolean
-  }>
+    name: string;
+    description: string;
+    type: string;
+    param_in: string;
+    required: boolean;
+    file_options?: string;
+  }>;
 }
 
 export default defineEventHandler(async (event: H3Event) => {

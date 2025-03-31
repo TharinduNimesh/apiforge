@@ -186,87 +186,144 @@ export default defineEventHandler(async (event) => {
       filter: `endpoint = "${id}"`
     })
 
-    // Get the request body
-    const body = await readBody(event)
+    // Check if request contains files
+    const contentType = event.node.req.headers['content-type'] || '';
+    const isMultipart = contentType.startsWith('multipart/form-data');
+    let body: any;
+
+    if (isMultipart) {
+      // Parse multipart form data
+      const formData = await readMultipartFormData(event);
+      body = {};
+
+      if (formData) {
+        for (const item of formData) {
+          const key = item.name || '';
+          if (key.endsWith('[]')) {
+            // Handle array fields (multiple files)
+            const cleanKey = key.slice(0, -2);
+            if (!body[cleanKey]) {
+              body[cleanKey] = [];
+            }
+            if (item.filename) {
+              // This is a file
+              body[cleanKey].push({
+                filename: item.filename,
+                type: item.type,
+                data: item.data
+              });
+            } else {
+              // This is a normal array field
+              body[cleanKey].push(item.data.toString());
+            }
+          } else {
+            // Handle single fields
+            if (item.filename) {
+              // This is a file
+              body[key] = {
+                filename: item.filename,
+                type: item.type,
+                data: item.data
+              };
+            } else {
+              // Try to parse as JSON if it looks like a JSON string
+              const strValue = item.data.toString();
+              try {
+                if (strValue.startsWith('{') || strValue.startsWith('[')) {
+                  body[key] = JSON.parse(strValue);
+                } else {
+                  body[key] = strValue;
+                }
+              } catch {
+                body[key] = strValue;
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Handle regular JSON body
+      body = await readBody(event);
+    }
 
     // Build the URL with path parameters
-    const baseUrl = endpoint.expand?.api?.baseUrl || ''
-    let path = endpoint.path
+    const baseUrl = endpoint.expand?.api?.baseUrl || '';
+    let path = endpoint.path;
     
     // Process parameters
-    const queryParams = new URLSearchParams()
+    const queryParams = new URLSearchParams();
     const headers = new Headers({
       'Accept': 'application/json'
-    })
-    let requestBody: Record<string, any> | FormData | undefined
+    });
+    let requestBody: any = undefined;
+    let requestFormData: FormData | undefined;
     
     // First, handle path parameters to construct the URL
     parameters.forEach(param => {
       if (param.param_in === 'path') {
-        const paramValue = body[param.name]
+        const paramValue = body[param.name];
         if (!paramValue && param.required) {
           throw createError({
             statusCode: 400,
             message: `Required path parameter '${param.name}' is missing`
-          })
+          });
         }
-        path = path.replace(`{${param.name}}`, paramValue)
+        path = path.replace(`{${param.name}}`, paramValue);
       }
-    })
+    });
 
-    // Construct URL - ensure both baseUrl and path are properly combined
-    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-    const cleanPath = path.startsWith('/') ? path.slice(1) : path
-    const url = new URL(cleanPath === '' ? cleanBaseUrl : `${cleanBaseUrl}/${cleanPath}`)
+    // Construct URL
+    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    const url = new URL(cleanPath === '' ? cleanBaseUrl : `${cleanBaseUrl}/${cleanPath}`);
     
     // Handle other parameter types
-    let isFormData = false
+    let hasFiles = false;
     parameters.forEach(param => {
-      const paramValue = body[param.name]
+      const paramValue = body[param.name];
       
       if (param.required && paramValue === undefined) {
         throw createError({
           statusCode: 400,
           message: `Required parameter '${param.name}' is missing`
-        })
+        });
       }
 
       if (paramValue !== undefined) {
         switch (param.param_in) {
           case 'query':
-            queryParams.append(param.name, paramValue)
-            break
+            queryParams.append(param.name, String(paramValue));
+            break;
           case 'header':
-            headers.append(param.name, paramValue)
-            break
+            headers.append(param.name, String(paramValue));
+            break;
           case 'body':
-            if (!requestBody || isFormData) {
-              requestBody = {} as Record<string, any>
-            }
-            if (requestBody && !isFormData) {
-              (requestBody as Record<string, any>)[param.name] = paramValue
-            }
-            break
-          case 'formdata':
-            if (!requestBody || !(requestBody instanceof FormData)) {
-              requestBody = new FormData()
-              isFormData = true
-            }
+            if (!requestBody) requestBody = {};
+            requestBody[param.name] = paramValue;
+            break;
+          case 'formData':
             if (param.type === 'file') {
-              const file = paramValue
-              if (file) {
-                (requestBody as FormData).append(param.name, file)
+              hasFiles = true;
+              if (!requestFormData) requestFormData = new FormData();
+              if (Array.isArray(paramValue)) {
+                // Handle multiple files
+                paramValue.forEach((file: any) => {
+                  requestFormData!.append(`${param.name}[]`, new Blob([file.data], { type: file.type }), file.filename);
+                });
+              } else if (paramValue?.filename) {
+                // Handle single file
+                requestFormData!.append(param.name, new Blob([paramValue.data], { type: paramValue.type }), paramValue.filename);
               }
-            } else {
-              (requestBody as FormData).append(param.name, paramValue)
+            } else if (requestFormData) {
+              requestFormData.append(param.name, String(paramValue));
             }
-            break
+            break;
         }
       }
-    })
+    });
 
     // Add query parameters to URL
-    url.search = queryParams.toString()
+    url.search = queryParams.toString();
 
     // Make the external API call
     let response;
@@ -274,8 +331,7 @@ export default defineEventHandler(async (event) => {
       response = await fetch(url, {
         method: endpoint.method,
         headers,
-        body: isFormData ? requestBody as FormData :
-              requestBody ? JSON.stringify(requestBody) : undefined
+        body: requestFormData || (requestBody ? JSON.stringify(requestBody) : undefined)
       });
 
       // Calculate response time and log the request

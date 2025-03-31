@@ -1,9 +1,19 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { ApiEndpoint } from '~/types/api';
+import type { ApiEndpoint, ApiParameter } from '~/types/api';
 import { usePocketBase } from '~/lib/pocketbase';
+import FilePicker from '~/components/ui/FilePicker.vue';
 
 const pb = usePocketBase();
+const toast = useToast();
+
+interface ExtendedParameter extends ApiParameter {
+  fileConfig?: {
+    multiple: boolean;
+    maxSize: number;
+    accept: string[] | string;
+  };
+}
 
 const props = defineProps<{
   endpoint: ApiEndpoint;
@@ -23,11 +33,17 @@ const loading = ref(false);
 const initRequestData = () => {
   requestData.value = {};
   if (props.endpoint.parameters) {
-    props.endpoint.parameters.forEach(param => {
-      if (param.type === 'number') {
+    props.endpoint.parameters.forEach((param: ExtendedParameter) => {
+      if (param.type === 'file') {
+        // Handle file parameters with proper configuration
+        const fileConfig = param.fileConfig || {
+          multiple: false,
+          maxSize: 2 * 1024 * 1024, // 2MB default
+          accept: ['*/*']
+        };
+        requestData.value[param.name] = fileConfig.multiple ? [] : null;
+      } else if (param.type === 'number') {
         requestData.value[param.name] = null;
-      } else if (param.type === 'file') {
-        requestData.value[param.name] = param.fileConfig?.multiple ? [] : null;
       } else if (param.type === 'json') {
         requestData.value[param.name] = '{}';
       } else {
@@ -53,69 +69,87 @@ const validateForm = () => {
   return errors;
 };
 
+const handleFilePickerError = (message: string) => {
+  toast.add({
+    title: 'File Upload Error',
+    description: message,
+    color: 'error'
+  });
+};
+
+const submitRequest = async () => {
+  try {
+    loading.value = true;
+    emit('loading', true);
+    emit('error', null);
+    emit('response', null);
+
+    const errors = validateForm();
+    if (errors.length > 0) {
+      emit('error', errors.join('\n'));
+      return;
+    }
+
+    // Create FormData if there are file uploads
+    const hasFileUploads = props.endpoint.parameters?.some(param => param.type === 'file');
+    const formData = hasFileUploads ? new FormData() : null;
+    const processedData: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(requestData.value)) {
+      const param = props.endpoint.parameters?.find(p => p.name === key);
+      
+      if (param?.type === 'file' && formData) {
+        if (param.fileConfig?.multiple && Array.isArray(value)) {
+          // Handle multiple files
+          value.forEach((file: File) => {
+            formData.append(`${key}[]`, file);
+          });
+        } else if (value instanceof File) {
+          // Handle single file
+          formData.append(key, value);
+        }
+      } else if (param?.type === 'json' && typeof value === 'string') {
+        try {
+          processedData[key] = JSON.parse(value);
+        } catch (e) {
+          throw new Error(`Invalid JSON in parameter ${key}`);
+        }
+      } else {
+        processedData[key] = value;
+      }
+    }
+
+    // If using FormData, add other parameters to it
+    if (formData) {
+      Object.entries(processedData).forEach(([key, value]) => {
+        if (typeof value === 'object') {
+          formData.append(key, JSON.stringify(value));
+        } else {
+          formData.append(key, String(value));
+        }
+      });
+    }
+
+    const response = await $fetch(`/api/call-endpoint/${props.endpoint.id}`, {
+      method: 'POST',
+      body: formData || processedData,
+      headers: {
+        'Authorization': `Bearer ${pb.authStore.token}`
+      }
+    });
+
+    emit('response', response);
+  } catch (error: any) {
+    emit('error', error.message || 'Failed to make request');
+  } finally {
+    loading.value = false;
+    emit('loading', false);
+  }
+};
+
 // Expose submit function to parent
 defineExpose({
-  submitRequest: async () => {
-    try {
-      loading.value = true;
-      emit('loading', true);
-      emit('error', null);
-      emit('response', null);
-
-      const errors = validateForm();
-      if (errors.length > 0) {
-        emit('error', errors.join('\n'));
-        return;
-      }
-
-      // Parse any JSON parameters
-      const processedData = { ...requestData.value };
-      props.endpoint.parameters?.forEach(param => {
-        if (param.type === 'json' && processedData[param.name]) {
-          try {
-            processedData[param.name] = JSON.parse(processedData[param.name]);
-          } catch (e) {
-            throw new Error(`Invalid JSON in parameter ${param.name}`);
-          }
-        }
-      });
-
-      // Make API call using the endpoint ID with authorization token
-      const response = await $fetch(`/api/call-endpoint/${props.endpoint.id}`, {
-        method: 'POST',
-        body: processedData,
-        headers: {
-          'Authorization': `Bearer ${pb.authStore.token}`
-        }
-      });
-
-      // Include rate limit info in the response
-      emit('response', response);
-    } catch (error: any) {
-      console.error('API call error:', error);
-      
-      // Handle rate limit exceeded specifically
-      if (error.status === 429) {
-        const response = {
-          statusCode: 429,
-          data: {
-            error: 'Rate Limit Exceeded',
-            message: error.data?.message || 'You have exceeded your rate limit for this API.',
-            details: 'Please try again later or contact your department administrator if you need a higher rate limit.'
-          }
-        };
-        emit('response', response);
-      } else {
-        emit('error', error.message || 'Failed to make API call');
-        if (error.data) {
-          emit('response', { status: error.status, data: error.data });
-        }
-      }
-    } finally {
-      loading.value = false;
-      emit('loading', false);
-    }
-  }
+  submitRequest
 });
 </script>
 
@@ -166,7 +200,17 @@ defineExpose({
               </div>
             </template>
             <template #default>
-              <template v-if="param.type === 'json'">
+              <template v-if="param.type === 'file'">
+                <FilePicker
+                  v-model="requestData[param.name]"
+                  :multiple="param.fileConfig?.multiple"
+                  :accept="Array.isArray(param.fileConfig?.accept) ? param.fileConfig.accept : [param.fileConfig?.accept || '*/*']"
+                  :max-size="param.fileConfig?.maxSize || 2097152"
+                  :max-files="param.fileConfig?.multiple ? 10 : 1"
+                  @error="handleFilePickerError"
+                />
+              </template>
+              <template v-else-if="param.type === 'json'">
                 <UTextarea
                   v-model="requestData[param.name]"
                   :name="param.name"
