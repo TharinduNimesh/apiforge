@@ -1,20 +1,25 @@
-import { H3Event } from 'h3'
+import { H3Event, H3Error } from 'h3'
 import { getAdminPocketBase, getUserPocketBase } from '../utils/pocketbase'
 
-interface ApiRecord {
+interface BaseRecord {
   id: string
+  created: string
+  updated: string
+  collectionId: string
+  collectionName: string
+}
+
+interface ApiRecord extends BaseRecord {
   name: string
   description: string
   baseUrl: string
   isActive: boolean
   type: string
-  createdBy: string;
-  createdAt: string
-  rateLimit: string
+  createdBy: string
+  rateLimit: number
 }
 
-interface EndpointRecord {
-  id: string
+interface EndpointRecord extends BaseRecord {
   name: string
   description: string
   path: string
@@ -22,8 +27,7 @@ interface EndpointRecord {
   api: string
 }
 
-interface ParameterRecord {
-  id: string
+interface ParameterRecord extends BaseRecord {
   name: string
   description: string
   type: string
@@ -32,12 +36,37 @@ interface ParameterRecord {
   endpoint: string
 }
 
-interface EndpointWithParams extends EndpointRecord {
-  parameters: ParameterRecord[]
+interface Department extends BaseRecord {
+  is_active: boolean
 }
 
-interface ApiResponse extends ApiRecord {
+interface ApiResponse {
+  id: string
+  name: string
+  description: string
+  baseUrl: string
+  isActive: boolean
+  type: string
+  createdBy: string
+  createdAt: string
+  rateLimit: number
   endpoints: EndpointWithParams[]
+}
+
+interface EndpointWithParams {
+  id: string
+  name: string
+  description: string
+  path: string
+  method: string
+  api: string
+  parameters: Array<{
+    name: string
+    description: string
+    type: string
+    param_in: string
+    required: boolean
+  }>
 }
 
 export default defineEventHandler(async (event: H3Event) => {
@@ -83,11 +112,9 @@ export default defineEventHandler(async (event: H3Event) => {
       })
     }
 
-    // Get API and check if it's active
     try {
-      const apiRecord = await adminPb.collection('apis').getOne(id)
+      const apiRecord = await adminPb.collection('apis').getOne<ApiRecord>(id)
       
-      // Only check for API active status for non-admin users
       if (!isAdmin && !apiRecord.isActive) {
         throw createError({
           statusCode: 403,
@@ -96,7 +123,7 @@ export default defineEventHandler(async (event: H3Event) => {
       }
 
       // Extract the API fields we need
-      const api: ApiRecord = {
+      const api: Omit<ApiResponse, 'endpoints'> = {
         id: apiRecord.id,
         name: apiRecord.name,
         description: apiRecord.description,
@@ -110,11 +137,13 @@ export default defineEventHandler(async (event: H3Event) => {
 
       // For non-admin users, check department access
       if (!isAdmin) {
-        // First get user's departments and expand department data
-        const departments = await adminPb.collection('departments').getFullList()
+        const departments = await adminPb.collection('departments').getFullList<Department>()
         const activeDepartments = departments.filter(d => d.is_active === true)
 
-        const departmentUsers = await adminPb.collection('department_users').getFullList({
+        const departmentUsers = await adminPb.collection('department_users').getFullList<{ 
+          user_id: string
+          department_id: string 
+        }>({
           filter: `user_id = "${userId}"`
         })
 
@@ -125,7 +154,6 @@ export default defineEventHandler(async (event: H3Event) => {
           })
         }
 
-        // Filter to get only active department IDs
         const activeDepartmentIds = departmentUsers
           .filter(du => activeDepartments.some(d => d.id === du.department_id))
           .map(du => du.department_id)
@@ -137,9 +165,10 @@ export default defineEventHandler(async (event: H3Event) => {
           })
         }
 
-        // Check API access for active departments
         const filter = activeDepartmentIds.map(dId => `department_id = "${dId}"`).join(' || ')
-        const departmentApis = await adminPb.collection('department_apis').getFullList({
+        const departmentApis = await adminPb.collection('department_apis').getFullList<{
+          api_id: string
+        }>({
           filter
         })
 
@@ -151,13 +180,11 @@ export default defineEventHandler(async (event: H3Event) => {
         }
       }
 
-      // Fetch endpoints for this API
       const endpoints = await adminPb.collection('endpoints').getFullList<EndpointRecord>({
         filter: `api = "${id}"`,
         sort: 'name'
       })
 
-      // Fetch parameters for all endpoints
       const endpointIds = endpoints.map(endpoint => endpoint.id)
       let parameters: ParameterRecord[] = []
       
@@ -168,15 +195,16 @@ export default defineEventHandler(async (event: H3Event) => {
         })
       }
 
-      // Group parameters by endpoint
-      const endpointsWithParams = endpoints.map(endpoint => ({
+      const endpointsWithParams: EndpointWithParams[] = endpoints.map(endpoint => ({
         id: endpoint.id,
         name: endpoint.name,
         description: endpoint.description,
         path: endpoint.path,
         method: endpoint.method,
         api: endpoint.api,
-        parameters: parameters.filter(param => param.endpoint === endpoint.id)
+        parameters: parameters
+          .filter(param => param.endpoint === endpoint.id)
+          .map(({ endpoint, ...param }) => param)
       }))
 
       const response: ApiResponse = {
@@ -187,20 +215,20 @@ export default defineEventHandler(async (event: H3Event) => {
       return response
 
     } catch (error: any) {
-      // Handle PocketBase specific errors
       if (error.status === 404) {
         throw createError({
           statusCode: 404,
           message: 'API not found'
         })
       }
-      throw error // Let the outer catch block handle other errors
+      throw error
     }
-  } catch (error: any) {
-    console.error('Error in [id].get.ts:', error)
+  } catch (error) {
+    const h3Error = error as H3Error
+    console.error('Error in [id].get.ts:', h3Error)
     throw createError({
-      statusCode: error.statusCode || 500,
-      message: error.message || 'Internal Server Error'
+      statusCode: h3Error.statusCode || 500,
+      message: h3Error.message || 'Internal Server Error'
     })
   }
 })

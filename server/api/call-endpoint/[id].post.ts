@@ -2,9 +2,15 @@ import { getAdminPocketBase, getUserPocketBase } from '../../utils/pocketbase'
 import { getRateLimit, incrementRateLimit } from '../../utils/redis'
 
 export default defineEventHandler(async (event) => {
+  // Start time for response time measurement
+  const startTime = Date.now()
+  const id = event.context.params?.id
+  const adminPb = getAdminPocketBase()
+  let userId = ''
+  let requestMethod: 'API' | 'WEB' = 'WEB'
+  let endpoint: any = null
+  
   try {
-    const id = event.context.params?.id
-    
     if (!id) {
       throw createError({
         statusCode: 400,
@@ -22,13 +28,12 @@ export default defineEventHandler(async (event) => {
     }
 
     const token = authHeader.replace('Bearer ', '')
-    const adminPb = getAdminPocketBase()
-    let userId: string
+    
     let isAdmin = false
 
     // Check if the token is an API key (starts with apf_)
     if (token.startsWith('apf_')) {
-      // Validate API key
+      requestMethod = 'API'
       try {
         const apiKeys = await adminPb.collection('api_keys').getFullList({
           filter: `key = "${token}" && expires > "${new Date().toISOString()}"`
@@ -42,7 +47,14 @@ export default defineEventHandler(async (event) => {
         }
 
         const apiKey = apiKeys[0]
-        userId = apiKey.user_id
+        const apiUserId = apiKey.user_id
+        if (!apiUserId) {
+          throw createError({
+            statusCode: 401,
+            message: 'Invalid API key - no user associated'
+          })
+        }
+        userId = apiUserId
 
         // Update last_used timestamp
         await adminPb.collection('api_keys').update(apiKey.id, {
@@ -72,19 +84,19 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      const possibleUserId = userPb.authStore.record?.id
-      if (!possibleUserId) {
+      const authUserId = userPb.authStore.record?.id
+      if (!authUserId) {
         throw createError({
           statusCode: 401,
           message: 'User ID not found'
         })
       }
-      userId = possibleUserId
+      userId = authUserId
       isAdmin = userPb.authStore.record?.role === 'admin'
     }
 
     // Get the endpoint details
-    const endpoint = await adminPb.collection('endpoints').getOne(id, {
+    endpoint = await adminPb.collection('endpoints').getOne(id, {
       expand: 'api'
     })
 
@@ -94,6 +106,8 @@ export default defineEventHandler(async (event) => {
         message: 'Endpoint not found'
       })
     }
+
+    const apiId = endpoint.api // Get the API ID from the endpoint
 
     // Check if API is active (for non-admin users)
     if (!isAdmin && !endpoint.expand?.api?.isActive) {
@@ -263,7 +277,67 @@ export default defineEventHandler(async (event) => {
         body: isFormData ? requestBody as FormData :
               requestBody ? JSON.stringify(requestBody) : undefined
       });
+
+      // Calculate response time and log the request
+      const responseTime = Date.now() - startTime
+
+      await adminPb.collection('api_requests').create({
+        api: apiId,
+        endpoint: id,
+        user: userId,
+        responseTime,
+        statusCode: response.status,
+        isSuccess: response.status >= 200 && response.status < 400,
+        method: requestMethod
+      })
+
+      // Check content type to determine how to parse the response
+      const contentType = response.headers.get('content-type');
+      let responseData = null;
+
+      try {
+        if (contentType?.includes('application/json')) {
+          // Try to parse as JSON
+          responseData = await response.json();
+        } else {
+          // For non-JSON responses, get the text
+          const textContent = await response.text();
+          responseData = {
+            content: textContent,
+            contentType: contentType || 'text/plain'
+          };
+        }
+      } catch (error: any) {
+        return {
+          statusCode: 502,
+          data: {
+            error: 'Bad Gateway',
+            message: 'Failed to parse the API response',
+            details: error.message
+          }
+        };
+      }
+
+      // Return the response with the same status code
+      return {
+        statusCode: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        data: responseData
+      };
+
     } catch (error: any) {
+      // Log failed request
+      const responseTime = Date.now() - startTime
+      await adminPb.collection('api_requests').create({
+        api: apiId,
+        endpoint: id,
+        user: userId,
+        responseTime,
+        statusCode: 503,
+        isSuccess: false,
+        method: requestMethod
+      })
+
       return {
         statusCode: 503,
         data: {
@@ -274,41 +348,25 @@ export default defineEventHandler(async (event) => {
       };
     }
 
-    // Check content type to determine how to parse the response
-    const contentType = response.headers.get('content-type');
-    let responseData = null;
-
+  } catch (error: any) {
+    // Log error request if we have the endpoint ID
+    const responseTime = Date.now() - startTime
     try {
-      if (contentType?.includes('application/json')) {
-        // Try to parse as JSON
-        responseData = await response.json();
-      } else {
-        // For non-JSON responses, get the text
-        const textContent = await response.text();
-        responseData = {
-          content: textContent,
-          contentType: contentType || 'text/plain'
-        };
+      if (endpoint?.api) {
+        await adminPb.collection('api_requests').create({
+          api: endpoint.api,
+          endpoint: id,
+          user: userId,
+          responseTime,
+          statusCode: error.statusCode || 500,
+          isSuccess: false,
+          method: requestMethod
+        })
       }
-    } catch (error: any) {
-      return {
-        statusCode: 502,
-        data: {
-          error: 'Bad Gateway',
-          message: 'Failed to parse the API response',
-          details: error.message
-        }
-      };
+    } catch (logError) {
+      console.error('Failed to log request:', logError)
     }
 
-    // Return the response with the same status code
-    return {
-      statusCode: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      data: responseData
-    };
-
-  } catch (error: any) {
     // Handle other errors
     if (error.statusCode) {
       throw error;

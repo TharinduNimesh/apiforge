@@ -44,7 +44,7 @@ async function submit(event: FormSubmitEvent<Schema>) {
     } catch (error: any) {
         toast.add({
             title: 'Error',
-            description: error.message || 'Invalid email or password',
+            description: 'Invalid email or password',
             color: 'error'
         });
     } finally {

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import type { TableColumn } from '~/types/table';
+import { usePocketBase } from '~/lib/pocketbase';
+
+const isLoading = ref(true);
 
 interface Props {
   apiId: string;
@@ -11,12 +13,11 @@ const props = withDefaults(defineProps<Props>(), {
   refreshInterval: 30
 });
 
-interface EndpointStat {
-  endpoint: string;
-  requests: number;
-  success: string;
-  avgTime: string;
-  lastUsed: string;
+interface StatsRecord {
+  success_rate: number;
+  avg_response_time: number;
+  total_requests: number;
+  hour: string;
 }
 
 const stats = ref({
@@ -26,48 +27,54 @@ const stats = ref({
     totalRequests: 0,
     previousSuccessRate: 0,
     previousAvgResponseTime: 0,
-  },
-  endpoints: [] as EndpointStat[]
+    lastUpdateTime: '',
+  }
 });
 
-const isLoading = ref(true);
+const getTimeAgo = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 60) {
+    return diffMins <= 1 ? 'Just now' : `${diffMins} minutes ago`;
+  } else if (diffHours < 24) {
+    return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
+  } else {
+    return diffDays === 1 ? 'Yesterday' : `${diffDays} days ago`;
+  }
+};
 
 const fetchStats = async () => {
   try {
     isLoading.value = true;
-    const timeframe = 3600; // Last hour
+    const pb = usePocketBase();
     
-    // TODO: Replace with actual API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Mock data for now
-    stats.value.overall.previousSuccessRate = stats.value.overall.successRate;
-    stats.value.overall.previousAvgResponseTime = stats.value.overall.avgResponseTime;
-    
-    stats.value = {
-      overall: {
+    // Fetch the latest hourly stats for this API
+    const hourlyStats = await pb.collection('api_stats_hourly').getList(1, 1, {
+      filter: `api_id = "${props.apiId}"`,
+      sort: '-hour'
+    });
+
+    if (hourlyStats.items.length > 0) {
+      const latestStats = hourlyStats.items[0] as StatsRecord;
+      
+      // Update the stats with real data
+      stats.value.overall.previousSuccessRate = stats.value.overall.successRate;
+      stats.value.overall.previousAvgResponseTime = stats.value.overall.avgResponseTime;
+      stats.value.overall.lastUpdateTime = latestStats.hour;
+      
+      stats.value.overall = {
         ...stats.value.overall,
-        successRate: 98.5,
-        avgResponseTime: 120,
-        totalRequests: 1234
-      },
-      endpoints: [
-        {
-          endpoint: '/users',
-          requests: 1250,
-          success: '98.5%',
-          avgTime: '245ms',
-          lastUsed: '2 mins ago'
-        },
-        {
-          endpoint: '/products',
-          requests: 890,
-          success: '99.1%',
-          avgTime: '189ms',
-          lastUsed: '5 mins ago'
-        }
-      ]
-    };
+        successRate: latestStats.success_rate,
+        avgResponseTime: latestStats.avg_response_time,
+        totalRequests: latestStats.total_requests,
+        lastUpdateTime: latestStats.hour
+      };
+    }
   } catch (error) {
     console.error('Failed to fetch API stats:', error);
   } finally {
@@ -99,17 +106,6 @@ const getTrendArrow = (trend: number, isResponseTime = false) => {
   return trend >= 0 ? '↑' : '↓';
 };
 
-const getMethodColor = (method: string) => {
-  switch (method) {
-    case 'GET': return 'success';
-    case 'POST': return 'info';
-    case 'PUT': return 'warning';
-    case 'DELETE': return 'error';
-    case 'PATCH': return 'warning';
-    default: return 'neutral';
-  }
-};
-
 let refreshTimer: ReturnType<typeof setInterval>;
 
 onMounted(() => {
@@ -123,57 +119,6 @@ onBeforeUnmount(() => {
   if (refreshTimer) {
     clearInterval(refreshTimer);
   }
-});
-
-const columns: TableColumn<EndpointStat>[] = [
-  {
-    key: 'endpoint',
-    label: 'Endpoint',
-    id: 'endpoint'
-  },
-  {
-    key: 'requests',
-    label: 'Total Requests',
-    id: 'requests'
-  },
-  {
-    key: 'success',
-    label: 'Success Rate',
-    id: 'success'
-  },
-  {
-    key: 'avgTime',
-    label: 'Avg. Response Time',
-    id: 'avgTime'
-  },
-  {
-    key: 'lastUsed',
-    label: 'Last Used',
-    id: 'lastUsed'
-  }
-];
-
-// Mock data
-const data = ref<EndpointStat[]>([
-  {
-    endpoint: '/users',
-    requests: 1250,
-    success: '98.5%',
-    avgTime: '245ms',
-    lastUsed: '2 mins ago'
-  },
-  {
-    endpoint: '/products',
-    requests: 890,
-    success: '99.1%',
-    avgTime: '189ms',
-    lastUsed: '5 mins ago'
-  }
-]);
-
-onMounted(async () => {
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  isLoading.value = false;
 });
 </script>
 
@@ -237,7 +182,7 @@ onMounted(async () => {
           </div>
           <p class="mt-2 text-3xl font-bold flex items-baseline">
             {{ stats.overall.totalRequests.toLocaleString() }}
-            <span class="text-sm ml-2 text-warning-200">Last Hour</span>
+            <span class="text-sm ml-2 text-warning-200">{{ stats.overall.lastUpdateTime ? getTimeAgo(stats.overall.lastUpdateTime) : 'No data' }}</span>
           </p>
           <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-warning-400/20 rounded-full blur-xl"></div>
         </div>
