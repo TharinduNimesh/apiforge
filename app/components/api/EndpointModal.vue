@@ -61,6 +61,14 @@ const getInitialFormState = (): ExtendedApiEndpoint => ({
 
 const state = reactive<ExtendedApiEndpoint>(props.endpoint ? { ...props.endpoint } : getInitialFormState());
 const selectedMethod = ref(httpMethods.find(m => m.value === state.method));
+
+// Add watcher for selectedMethod with proper type assertion
+watch(selectedMethod, (newMethod) => {
+  if (newMethod) {
+    state.method = newMethod.value as ApiEndpoint['method'];
+  }
+}, { immediate: true });
+
 const toast = useToast();
 const errors = reactive<Record<string, string>>({});
 const open = ref(false);
