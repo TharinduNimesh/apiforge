@@ -218,9 +218,9 @@ const contentTypeHeader = computed(() => {
     return null;
 });
 
-// Update curlExample to handle undefined header parameters
+// Update curlExample to always use POST
 const curlExample = computed(() => {
-    let command = `curl -X ${props.endpoint.method} "${exampleRequestUrl.value}"`;
+    let command = `curl -X POST "${exampleRequestUrl.value}"`;
     
     command += ' \\\n-H "Authorization: Bearer YOUR_API_KEY"';
     
@@ -232,23 +232,23 @@ const curlExample = computed(() => {
         command += ` \\\n-H "${param.name}: ${getDefaultValue(param)}"`;
     });
     
-    if (exampleRequestBody.value && ['POST', 'PUT', 'PATCH'].includes(props.endpoint.method)) {
+    if (exampleRequestBody.value) {
         command += ` \\\n-d '${exampleRequestBody.value}'`;
     }
     
-    if (exampleFormData.value && ['POST', 'PUT', 'PATCH'].includes(props.endpoint.method)) {
+    if (exampleFormData.value) {
         command += ` \\\n${exampleFormData.value}`;
     }
     
     return command;
 });
 
-// Update fetchExample to handle undefined header parameters
+// Update fetchExample to always use POST
 const fetchExample = computed(() => {
     let code = 'const response = await fetch';
     
     code += `(\n  "${exampleRequestUrl.value}",\n  {\n`;
-    code += `    method: "${props.endpoint.method}",\n`;
+    code += `    method: "POST",\n`;
     code += '    headers: {\n';
     code += '      "Authorization": "Bearer YOUR_API_KEY",\n';
     
@@ -262,13 +262,13 @@ const fetchExample = computed(() => {
     
     code += '    }';
     
-    if (exampleRequestBody.value && ['POST', 'PUT', 'PATCH'].includes(props.endpoint.method)) {
+    if (exampleRequestBody.value) {
         code += ',\n    body: JSON.stringify(';
         code += exampleRequestBody.value;
         code += ')';
     }
     
-    if (exampleFormData.value && ['POST', 'PUT', 'PATCH'].includes(props.endpoint.method)) {
+    if (exampleFormData.value) {
         code += ',\n    body: new FormData()';
     }
     
@@ -363,6 +363,9 @@ const fetchExample = computed(() => {
                                 <div class="flex items-start gap-3">
                                     <UIcon name="i-heroicons-information-circle" class="text-primary-500 flex-shrink-0 mt-1" />
                                     <div class="space-y-2">
+                                        <p class="text-gray-600 text-sm">
+                                            <strong>Important:</strong> All API calls must be made using POST method to the /api/call-endpoint/{id} endpoint, regardless of the endpoint's defined HTTP method.
+                                        </p>
                                         <p class="text-gray-600 text-sm">
                                             You can generate API keys from your 
                                             <NuxtLink 
