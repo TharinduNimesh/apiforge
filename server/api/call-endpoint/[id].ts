@@ -107,6 +107,15 @@ export default defineEventHandler(async (event) => {
       })
     }
 
+    // Verify that the request method matches the endpoint's method
+    const requestHttpMethod = event.method.toUpperCase()
+    if (requestHttpMethod !== endpoint.method) {
+      throw createError({
+        statusCode: 405,
+        message: `Method Not Allowed - This endpoint only accepts ${endpoint.method} requests`
+      })
+    }
+
     const apiId = endpoint.api // Get the API ID from the endpoint
 
     // Check if API is active (for non-admin users)
@@ -329,7 +338,7 @@ export default defineEventHandler(async (event) => {
     let response;
     try {
       response = await fetch(url, {
-        method: endpoint.method,
+        method: requestHttpMethod, // Use the actual request method
         headers,
         body: requestFormData || (requestBody ? JSON.stringify(requestBody) : undefined)
       });
