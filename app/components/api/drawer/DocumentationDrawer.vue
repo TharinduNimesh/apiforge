@@ -2,6 +2,7 @@
 import { h, resolveComponent } from 'vue';
 import type { TableColumn } from '#ui/types';
 import type { ApiEndpoint, ApiParameter } from '~/types/api';
+import ShikiHighlight from "~/components/ShikiHighlight.vue";
 
 const UBadge = resolveComponent('UBadge');
 
@@ -126,12 +127,26 @@ const columns: TableColumn<ReturnType<typeof transformParameters>[0]>[] = [
     }
 ];
 
-// Type-safe clipboard operations
+// Type-safe clipboard operations with success notification
 const copyToClipboard = async (text: string) => {
     try {
         await window.navigator.clipboard.writeText(text);
+        // Show success notification
+        useToast().add({
+            title: 'Copied to clipboard',
+            color: 'success',
+            icon: 'i-heroicons-clipboard-document-check',
+            duration: 2000
+        });
     } catch (error) {
         console.error('Failed to copy to clipboard:', error);
+        useToast().add({
+            title: 'Failed to copy',
+            description: 'Could not access clipboard',
+            color: 'error',
+            icon: 'i-heroicons-exclamation-triangle',
+            duration: 3000
+        });
     }
 };
 
@@ -162,41 +177,77 @@ const queryString = computed(() => {
     return `?${params}`;
 });
 
-// Update exampleRequestBody to handle undefined safely
+// Update exampleRequestBody to only include parameters that actually exist for this endpoint
 const exampleRequestBody = computed(() => {
-    const bodyParams = parametersByLocation.value.body;
-    if (!bodyParams?.length) return null;
-    
     const bodyObj: Record<string, any> = {};
+    let hasParameters = false;
     
-    bodyParams.forEach(param => {
-        let value: any;
-        
-        switch (param.type) {
-            case 'string':
-                value = `example-${param.name}`;
-                break;
-            case 'number':
-                value = 123;
-                break;
-            case 'boolean':
-                value = true;
-                break;
-            case 'array':
-                value = ['item1', 'item2'];
-                break;
-            case 'object':
-                value = { key: 'value' };
-                break;
-            default:
-                value = `example-${param.name}`;
-        }
-        
-        bodyObj[param.name] = value;
-    });
+    // Add path parameters if they exist
+    if (parametersByLocation.value.path?.length) {
+        parametersByLocation.value.path.forEach(param => {
+            bodyObj[param.name] = generateExampleValue(param);
+            hasParameters = true;
+        });
+    }
     
-    return JSON.stringify(bodyObj, null, 2);
+    // Add query parameters if they exist
+    if (parametersByLocation.value.query?.length) {
+        parametersByLocation.value.query.forEach(param => {
+            bodyObj[param.name] = generateExampleValue(param);
+            hasParameters = true;
+        });
+    }
+    
+    // Add header parameters if they exist
+    if (parametersByLocation.value.header?.length) {
+        parametersByLocation.value.header.forEach(param => {
+            bodyObj[param.name] = generateExampleValue(param);
+            hasParameters = true;
+        });
+    }
+    
+    // Add body parameters if they exist
+    if (parametersByLocation.value.body?.length) {
+        parametersByLocation.value.body.forEach(param => {
+            bodyObj[param.name] = generateExampleValue(param);
+            hasParameters = true;
+        });
+    }
+    
+    // Add form data parameters (non-file) if they exist
+    if (parametersByLocation.value.formData?.length) {
+        parametersByLocation.value.formData.forEach(param => {
+            if (param.type !== 'file') {
+                bodyObj[param.name] = generateExampleValue(param);
+                hasParameters = true;
+            } else {
+                // For file parameters, we show a placeholder
+                bodyObj[param.name] = `[File content for ${param.name}]`;
+                hasParameters = true;
+            }
+        });
+    }
+    
+    return hasParameters ? bodyObj : null;
 });
+
+// Helper function to generate example values based on parameter type
+const generateExampleValue = (param: ApiParameter): any => {
+    switch (param.type) {
+        case 'string':
+            return `example-${param.name}`;
+        case 'number':
+            return 123;
+        case 'boolean':
+            return true;
+        case 'array':
+            return ['item1', 'item2'];
+        case 'object':
+            return { key: 'value' };
+        default:
+            return `example-${param.name}`;
+    }
+};
 
 // Update exampleFormData to handle undefined safely
 const exampleFormData = computed(() => {
@@ -204,72 +255,104 @@ const exampleFormData = computed(() => {
     if (!formDataParams?.length) return null;
     
     return formDataParams.map(param => {
+        if (param.type === 'file') {
+            return `-F "${param.name}=@file.${param.fileConfig?.accept?.[0]?.split('/')[1] || 'jpg'}"`;
+        }
         return `-F "${param.name}=${getDefaultValue(param)}"`;
     }).join(' \\\n');
 });
 
-// Update contentTypeHeader to handle undefined safely
+// Update contentTypeHeader to handle undefined safely and always provide content type for JSON
 const contentTypeHeader = computed(() => {
     if (parametersByLocation.value.formData?.length) {
         return 'multipart/form-data';
     } else if (parametersByLocation.value.body?.length) {
         return 'application/json';
     }
-    return null;
+    // Always return application/json as default for proper API functionality
+    return 'application/json';
 });
 
-// Update curlExample to always use POST
+// Update curlExample to be cleaner and only include body when parameters exist
 const curlExample = computed(() => {
-    let command = `curl -X POST "${exampleRequestUrl.value}"`;
+    let command = `curl --request POST`;
+    command += ` \\\n  --url "${exampleRequestUrl.value}"`;
     
-    command += ' \\\n-H "Authorization: Bearer YOUR_API_KEY"';
+    // Always include authentication header
+    command += ' \\\n  --header "Authorization: Bearer YOUR_API_KEY"';
     
-    if (contentTypeHeader.value) {
-        command += ` \\\n-H "Content-Type: ${contentTypeHeader.value}"`;
+    // Only include Content-Type when we have parameters
+    const hasParameters = exampleRequestBody.value || exampleFormData.value;
+    if (hasParameters) {
+        command += ` \\\n  --header "Content-Type: ${contentTypeHeader.value}"`;
     }
     
-    parametersByLocation.value.header?.forEach(param => {
-        command += ` \\\n-H "${param.name}: ${getDefaultValue(param)}"`;
-    });
-    
-    if (exampleRequestBody.value) {
-        command += ` \\\n-d '${exampleRequestBody.value}'`;
-    }
-    
+    // For form data
     if (exampleFormData.value) {
-        command += ` \\\n${exampleFormData.value}`;
+        command += ` \\\n  ${exampleFormData.value}`;
+    } 
+    // For JSON body - only include if we have parameters
+    else if (exampleRequestBody.value) {
+        command += ` \\\n  --data '${JSON.stringify(exampleRequestBody.value, null, 2)}'`;
     }
     
     return command;
 });
 
-// Update fetchExample to always use POST
+// Update fetchExample to be cleaner and only include data when needed
 const fetchExample = computed(() => {
     let code = 'const response = await fetch';
-    
     code += `(\n  "${exampleRequestUrl.value}",\n  {\n`;
-    code += `    method: "POST",\n`;
+    code += '    method: "POST",\n';
     code += '    headers: {\n';
-    code += '      "Authorization": "Bearer YOUR_API_KEY",\n';
+    code += '      "Authorization": "Bearer YOUR_API_KEY"';
     
-    if (contentTypeHeader.value) {
-        code += `      "Content-Type": "${contentTypeHeader.value}",\n`;
+    // Only include Content-Type when we have parameters
+    const hasParameters = exampleRequestBody.value || (parametersByLocation.value.formData?.length > 0);
+    if (hasParameters) {
+        code += `,\n      "Content-Type": "${contentTypeHeader.value}"`;
     }
     
-    parametersByLocation.value.header?.forEach(param => {
-        code += `      "${param.name}": ${getDefaultValue(param)},\n`;
-    });
-    
-    code += '    }';
-    
-    if (exampleRequestBody.value) {
+    code += '\n    }';
+
+    // Handle form data
+    if (parametersByLocation.value.formData?.length) {
+        code += ',\n    body: (() => {\n';
+        code += '      const formData = new FormData();\n';
+        
+        // Add form data parameters
+        parametersByLocation.value.formData.forEach(param => {
+            if (param.type === 'file') {
+                code += `      // Add your file to formData\n`;
+                code += `      formData.append("${param.name}", fileInput.files[0]);\n`;
+            } else {
+                code += `      formData.append("${param.name}", ${JSON.stringify(generateExampleValue(param))});\n`;
+            }
+        });
+        
+        // Add other parameters
+        const otherParams = [
+            ...(parametersByLocation.value.path || []),
+            ...(parametersByLocation.value.query || []),
+            ...(parametersByLocation.value.header || []),
+            ...(parametersByLocation.value.body || [])
+        ];
+        
+        if (otherParams.length > 0) {
+            code += '\n      // Add additional parameters\n';
+            otherParams.forEach(param => {
+                code += `      formData.append("${param.name}", ${JSON.stringify(generateExampleValue(param))});\n`;
+            });
+        }
+        
+        code += '      return formData;\n';
+        code += '    })()';
+    }
+    // Handle JSON body
+    else if (exampleRequestBody.value) {
         code += ',\n    body: JSON.stringify(';
-        code += exampleRequestBody.value;
+        code += JSON.stringify(exampleRequestBody.value, null, 6);
         code += ')';
-    }
-    
-    if (exampleFormData.value) {
-        code += ',\n    body: new FormData()';
     }
     
     code += '\n  }\n);\n\n';
@@ -483,7 +566,12 @@ const fetchExample = computed(() => {
                                     @click="() => copyToClipboard(curlExample)"
                                 />
                             </div>
-                            <pre class="text-sm font-mono whitespace-pre-wrap p-2 overflow-x-auto">{{ curlExample }}</pre>
+                            <ClientOnly>
+                                <ShikiHighlight
+                                    lang="bash"
+                                    :code="curlExample"
+                                />
+                            </ClientOnly>
                         </UCard>
                         
                         <!-- JavaScript fetch example -->
@@ -498,7 +586,12 @@ const fetchExample = computed(() => {
                                     @click="() => copyToClipboard(fetchExample)"
                                 />
                             </div>
-                            <pre class="text-sm font-mono whitespace-pre-wrap p-2 overflow-x-auto">{{ fetchExample }}</pre>
+                            <ClientOnly>
+                                <ShikiHighlight
+                                    lang="javascript"
+                                    :code="fetchExample"
+                                />
+                            </ClientOnly>
                         </UCard>
                     </div>
                 </div>
