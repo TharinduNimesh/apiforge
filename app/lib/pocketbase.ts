@@ -1,6 +1,9 @@
 import PocketBase from 'pocketbase';
+import { useRuntimeConfig } from '#imports';
 
-export const pb = new PocketBase('https://pocketbase.eversoft.lk');
+// Use the public URL for client-side requests
+const config = useRuntimeConfig();
+export const pb = new PocketBase(config.public.pocketbaseUrl);
 
 export function usePocketBase() {
     return pb;

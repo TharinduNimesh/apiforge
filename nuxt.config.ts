@@ -3,6 +3,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
   devtools: { enabled: true },
   modules: ['@nuxt/ui'],
+  ssr: false,
 
   colorMode: {
     preference: 'light',
@@ -29,12 +30,14 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     PB_SUPER_ADMIN_KEY: process.env.PB_SUPER_ADMIN_KEY,
+    pocketbaseUrl: process.env.PB_INTERNAL_URL || 'http://pb:8080', // server-side URL
     redis: {
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379')
     },
     public: {
       appUrl: process.env.APP_URL,
+      pocketbaseUrl: process.env.PB_URL || 'http://localhost:8080', // client-side URL
     }
   }
 })

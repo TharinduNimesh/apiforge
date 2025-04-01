@@ -1,0 +1,36 @@
+# Build stage
+FROM oven/bun:1.2-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lock ./
+
+# Install dependencies
+RUN bun install --frozen-lockfile --production
+
+# Copy only necessary source code
+COPY . .
+
+# Build the application
+RUN bun run build
+
+# Production stage
+FROM oven/bun:1.2-alpine as runner
+
+# Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+# Copy only the built files and production dependencies from builder stage
+COPY --from=builder --chown=appuser:appgroup /app/.output ./.output
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 3000
+
+# Run the application
+CMD ["bun", ".output/server/index.mjs"]
