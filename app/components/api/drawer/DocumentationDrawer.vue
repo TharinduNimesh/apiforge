@@ -35,7 +35,7 @@ const getDefaultValue = (param: ApiParameter): string => {
 };
 
 const exampleRequestUrl = computed(() => {
-    return `${baseUrl}${examplePath.value}${queryString.value}`;
+    return endpointUrl.value;
 });
 
 const copyEndpointUrl = async () => {
