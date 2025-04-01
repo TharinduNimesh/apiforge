@@ -128,19 +128,14 @@ const tabs = [
 
 const handleArchive = async () => {
   try {
+    if (!api.value?.id) return;
+    
     loading.value = true;
-    const response = await fetch(`/api/${api.value?.id}/archive`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${pb.authStore.token}`,
-      },
+    await pb.collection('apis').update(api.value.id, {
+      isActive: false
     });
 
-    if (!response.ok) {
-      throw new Error("Failed to archive API");
-    }
-
-    if (api.value) api.value.status = "INACTIVE";
+    api.value.status = "INACTIVE";
     useToast().add({
       title: "Success",
       description: "API archived successfully",
@@ -161,19 +156,14 @@ const handleArchive = async () => {
 
 const handleUnarchive = async () => {
   try {
+    if (!api.value?.id) return;
+
     loading.value = true;
-    const response = await fetch(`/api/${api.value?.id}/restore`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${pb.authStore.token}`,
-      },
+    await pb.collection('apis').update(api.value.id, {
+      isActive: true
     });
 
-    if (!response.ok) {
-      throw new Error("Failed to restore API");
-    }
-
-    if (api.value) api.value.status = "ACTIVE";
+    api.value.status = "ACTIVE";
     useToast().add({
       title: "Success",
       description: "API restored successfully",
@@ -194,17 +184,10 @@ const handleUnarchive = async () => {
 
 const handleDelete = async () => {
   try {
-    loading.value = true;
-    const response = await fetch(`/api/${api.value?.id}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${pb.authStore.token}`,
-      },
-    });
+    if (!api.value?.id) return;
 
-    if (!response.ok) {
-      throw new Error("Failed to delete API");
-    }
+    loading.value = true;
+    await pb.collection('apis').delete(api.value.id);
 
     // Navigate back to the console after successful deletion
     navigateTo("/console");
