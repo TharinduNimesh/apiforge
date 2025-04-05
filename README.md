@@ -5,13 +5,13 @@ A robust API management solution built with Nuxt.js and Nuxt UI, offering compre
 ## 📸 Application Screenshots
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/TharinduNimesh/api-application/refs/heads/main/docs/images/dashboard.png" alt="Dashboard" width="800"/>
+  <img src="https://raw.githubusercontent.com/TharinduNimesh/apiforge/refs/heads/main/docs/images/dashboard.png" alt="Dashboard" width="800"/>
   <p><em>Dashboard - API Management Overview</em></p>
   
-  <img src="https://raw.githubusercontent.com/TharinduNimesh/api-application/refs/heads/main/docs/images/stats.png" alt="API Creation" width="800"/>
+  <img src="https://raw.githubusercontent.com/TharinduNimesh/apiforge/refs/heads/main/docs/images/stats.png" alt="API Creation" width="800"/>
   <p><em>API Info & Usage Analytics</em></p>
   
-  <img src="https://raw.githubusercontent.com/TharinduNimesh/api-application/refs/heads/main/docs/images/usage.png" alt="Analytics" width="800"/>
+  <img src="https://raw.githubusercontent.com/TharinduNimesh/apiforge/refs/heads/main/docs/images/usage.png" alt="Analytics" width="800"/>
   <p><em>API Response Preview</em></p>
 </div>
 
