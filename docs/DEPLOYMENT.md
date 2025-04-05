@@ -53,7 +53,7 @@ docker-compose up --build
 ### 4. Set Up PocketBase Superadmin
 After the services are up, a URL will be logged in the console for setting up the PocketBase superadmin user. It will look like this:
 
-![Placeholder for PocketBase URL Screenshot](../docs/images/pocketbase-url-placeholder.png)
+![Placeholder for PocketBase URL Screenshot](https://raw.githubusercontent.com/TharinduNimesh/apiforge/refs/heads/main/docs/images/superadmin-url.png)
 
 If you are on a VPS, replace `0.0.0.0:8080` with your server's IP address (e.g., `your-server-ip:8080`). Navigate to this URL in your browser.
 
@@ -70,7 +70,7 @@ You will see a signup form. Use your email and password to create a superadmin u
 1. Navigate to **Collections** -> **System** -> **_superusers**.
 2. Select your user row and click the three dots (placeholder image below):
 
-![Placeholder for Superuser Options Screenshot](../docs/images/superuser-options-placeholder.png)
+![Placeholder for Superuser Options Screenshot](https://raw.githubusercontent.com/TharinduNimesh/apiforge/refs/heads/main/docs/images/impersonate.png)
 
 3. Click **Impersonate** and paste `307584000` (10 years in seconds).
 4. Generate a superadmin key and copy it.
