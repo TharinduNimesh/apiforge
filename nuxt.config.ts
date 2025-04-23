@@ -32,8 +32,7 @@ export default defineNuxtConfig({
     PB_SUPER_ADMIN_KEY: process.env.PB_SUPER_ADMIN_KEY,
     pocketbaseUrl: process.env.PB_INTERNAL_URL || 'http://pb:8080', // server-side URL
     redis: {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379')
+      url: process.env.REDIS_URL || 'redis://localhost:6379',
     },
     public: {
       appUrl: process.env.APP_URL,

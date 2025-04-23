@@ -6,7 +6,9 @@ let redisClient: ReturnType<typeof createClient> | null = null;
 export async function getRedisClient() {
   if (!redisClient) {
     const config = useRuntimeConfig()
-    redisClient = createClient();
+    redisClient = createClient({
+      url: config.redis.url
+    })
 
     redisClient.on('error', (err) => {
       console.error('Redis Client Error:', err)
