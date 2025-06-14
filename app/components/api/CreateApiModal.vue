@@ -59,7 +59,7 @@
                 Import APIs
               </h3>
               <p class="text-sm leading-relaxed" :class="showFileUpload ? 'text-gray-300' : 'text-gray-500'">
-                Import APIs from OpenAPI specification JSON file.
+                Import APIs from OpenAPI 3.0 or Swagger 2.0 specification JSON file.
               </p>
             </div>
           </div>
@@ -70,7 +70,7 @@
           >
             <div class="flex items-center gap-3 mb-4">
               <UIcon name="i-heroicons-arrow-up-tray" class="text-xl text-orange-600" />
-              <h3 class="text-lg font-semibold text-gray-900">Import APIs from OpenAPI JSON</h3>
+              <h3 class="text-lg font-semibold text-gray-900">Import APIs from OpenAPI/Swagger JSON</h3>
             </div>
             
             <UFormField name="file">
@@ -96,7 +96,7 @@
             <!-- Validation Messages -->
             <div v-if="validationStatus === 'valid'" class="mt-4">
               <UAlert
-                title="Valid OpenAPI specification"
+                title="Valid API specification"
                 description="You can proceed with the import."
                 color="success"
                 variant="soft"
@@ -112,15 +112,26 @@
                 icon="i-heroicons-x-circle"
               >
                 <template #description>
-                  <div class="flex items-center justify-between">
-                    <span>Download our sample OpenAPI specification to see the required structure.</span>
-                    <UButton
-                      color="neutral"
-                      variant="ghost"
-                      icon="i-heroicons-arrow-down-tray"
-                      class="rounded-full"
-                      @click="openSampleOpenApi"
-                    />
+                  <div class="space-y-2">
+                    <span>Download our sample files to see the required structure:</span>
+                    <div class="flex items-center gap-2">
+                      <UButton
+                        label="OpenAPI Sample"
+                        color="neutral"
+                        variant="ghost"
+                        icon="i-heroicons-arrow-down-tray"
+                        size="xs"
+                        @click="openSampleOpenApi"
+                      />
+                      <UButton
+                        label="Swagger Sample"
+                        color="neutral"
+                        variant="ghost"
+                        icon="i-heroicons-arrow-down-tray"
+                        size="xs"
+                        @click="openSampleSwagger"
+                      />
+                    </div>
                   </div>
                 </template>
               </UAlert>
@@ -161,6 +172,7 @@ const isValidFile = computed(() => uploadedFile.value !== null && validationStat
 const isSubmitting = ref(false)
 
 interface OpenAPISpec {
+  openapi: string
   info: {
     title: string
     description?: string
@@ -182,6 +194,36 @@ interface OpenAPISpec {
   }>>
 }
 
+interface SwaggerSpec {
+  swagger: string
+  info: {
+    title: string
+    description?: string
+    version: string
+  }
+  host?: string
+  basePath?: string
+  schemes?: string[]
+  paths: Record<string, Record<string, {
+    summary?: string
+    description?: string
+    tags?: string[]
+    parameters?: {
+      name: string
+      in: string
+      description?: string
+      required?: boolean
+      type?: string
+      format?: string
+      schema?: {
+        type: string
+      }
+    }[]
+  }>>
+}
+
+type ApiSpec = OpenAPISpec | SwaggerSpec
+
 const resetState = () => {
   showFileUpload.value = false
   uploadedFile.value = null
@@ -191,28 +233,64 @@ const resetState = () => {
   isSubmitting.value = false
 }
 
+const detectApiSpecType = (jsonData: any): 'openapi' | 'swagger' | 'unknown' => {
+  if (jsonData.openapi && typeof jsonData.openapi === 'string') {
+    return 'openapi'
+  }
+  if (jsonData.swagger && typeof jsonData.swagger === 'string') {
+    return 'swagger'
+  }
+  return 'unknown'
+}
+
 const validateOpenAPIStructure = (jsonData: any): boolean => {
   try {
-    const isValid = 
-      typeof jsonData === 'object' &&
-      jsonData.openapi && 
-      jsonData.info && 
-      jsonData.info.title &&
-      jsonData.info.version &&
-      jsonData.paths &&
-      Object.keys(jsonData.paths).length > 0
-
-    if (!isValid) {
-      validationError.value = 'Invalid OpenAPI format. The file must be a valid OpenAPI 3.0 specification.'
-      validationStatus.value = 'invalid'
-    } else {
-      validationError.value = ''
-      validationStatus.value = 'valid'
-    }
+    const specType = detectApiSpecType(jsonData)
     
-    return isValid
+    if (specType === 'openapi') {
+      const isValid = 
+        typeof jsonData === 'object' &&
+        jsonData.openapi && 
+        jsonData.info && 
+        jsonData.info.title &&
+        jsonData.info.version &&
+        jsonData.paths &&
+        Object.keys(jsonData.paths).length > 0
+
+      if (!isValid) {
+        validationError.value = 'Invalid OpenAPI format. The file must be a valid OpenAPI 3.0 specification.'
+        validationStatus.value = 'invalid'
+      } else {
+        validationError.value = ''
+        validationStatus.value = 'valid'
+      }
+      
+      return isValid
+    } else if (specType === 'swagger') {
+      const isValid = 
+        typeof jsonData === 'object' &&
+        jsonData.swagger && 
+        jsonData.info && 
+        jsonData.info.title &&
+        jsonData.paths &&
+        Object.keys(jsonData.paths).length > 0
+
+      if (!isValid) {
+        validationError.value = 'Invalid Swagger format. The file must be a valid Swagger 2.0 specification.'
+        validationStatus.value = 'invalid'
+      } else {
+        validationError.value = ''
+        validationStatus.value = 'valid'
+      }
+      
+      return isValid
+    } else {
+      validationError.value = 'Unsupported format. The file must be either a valid OpenAPI 3.0 or Swagger 2.0 specification.'
+      validationStatus.value = 'invalid'
+      return false
+    }
   } catch (error) {
-    validationError.value = 'Error validating OpenAPI structure'
+    validationError.value = 'Error validating API specification structure'
     validationStatus.value = 'invalid'
     return false
   }
@@ -246,8 +324,12 @@ const openSampleOpenApi = () => {
   window.open('/sample-openapi.json', '_blank')
 }
 
+const openSampleSwagger = () => {
+  window.open('/sample-postgres-swagger-doc.json', '_blank')
+}
+
 const mapOpenAPITypeToPocketBase = (openAPIType: string): string => {
-  // Map OpenAPI types to PocketBase supported types
+  // Map OpenAPI/Swagger types to PocketBase supported types
   switch (openAPIType) {
     case 'integer':
     case 'number':
@@ -312,7 +394,74 @@ const createApiFromOpenAPI = async (jsonData: OpenAPISpec) => {
 
     return true
   } catch (error) {
-    console.error('Error creating API:', error)
+    console.error('Error creating API from OpenAPI:', error)
+    throw error
+  }
+}
+
+const createApiFromSwagger = async (jsonData: SwaggerSpec) => {
+  try {
+    // Build base URL from Swagger spec
+    let baseUrl = ''
+    if (jsonData.host) {
+      const scheme = jsonData.schemes?.[0] || 'http'
+      baseUrl = `${scheme}://${jsonData.host}`
+      if (jsonData.basePath) {
+        baseUrl += jsonData.basePath
+      }
+    }
+
+    // Create API record
+    const apiData = {
+      name: jsonData.info.title,
+      description: jsonData.info.description || jsonData.info.title,
+      baseUrl: baseUrl,
+      isActive: true,
+      type: 'FREE',
+      createdBy: pb.authStore.model?.id,
+      rateLimit: '100' // Default rate limit
+    }
+
+    const apiRecord = await pb.collection('apis').create(apiData)
+
+    // Create endpoints and parameters
+    for (const [path, methods] of Object.entries(jsonData.paths)) {
+      for (const [method, details] of Object.entries(methods)) {
+        // Create endpoint
+        const endpointData = {
+          name: details.summary || `${method.toUpperCase()} ${path}`,
+          description: details.description || '',
+          path: path,
+          method: method.toUpperCase(),
+          api: apiRecord.id
+        }
+
+        const endpointRecord = await pb.collection('endpoints').create(endpointData)
+
+        // Create parameters if any
+        if (details.parameters) {
+          for (const param of details.parameters) {
+            // Handle different parameter types in Swagger
+            const paramType = param.type || param.schema?.type || 'string'
+            
+            const parameterData = {
+              name: param.name,
+              description: param.description || '',
+              type: mapOpenAPITypeToPocketBase(paramType),
+              param_in: param.in,
+              required: param.required || false,
+              endpoint: endpointRecord.id
+            }
+
+            await pb.collection('parameters').create(parameterData)
+          }
+        }
+      }
+    }
+
+    return true
+  } catch (error) {
+    console.error('Error creating API from Swagger:', error)
     throw error
   }
 }
@@ -323,12 +472,20 @@ const submitImport = async () => {
   isSubmitting.value = true
 
   try {
-    const jsonData = JSON.parse(fileContent.value) as OpenAPISpec
-    await createApiFromOpenAPI(jsonData)
+    const jsonData = JSON.parse(fileContent.value) as ApiSpec
+    const specType = detectApiSpecType(jsonData)
+    
+    if (specType === 'openapi') {
+      await createApiFromOpenAPI(jsonData as OpenAPISpec)
+    } else if (specType === 'swagger') {
+      await createApiFromSwagger(jsonData as SwaggerSpec)
+    } else {
+      throw new Error('Unsupported API specification format')
+    }
     
     useToast().add({
       title: 'Success',
-      description: 'Successfully imported API',
+      description: `Successfully imported API from ${specType === 'openapi' ? 'OpenAPI' : 'Swagger'} specification`,
       color: 'success'
     })
 
